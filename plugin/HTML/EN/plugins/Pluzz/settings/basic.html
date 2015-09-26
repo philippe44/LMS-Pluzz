@@ -1,0 +1,19 @@
+[% PROCESS settings/header.html %]
+
+	[% WRAPPER setting title="PLUGIN_PLUZZ_BANNER" %]
+		<div>[% "PLUGIN_PLUZZ_BANNER_TEXT" | string %]</div>
+	[% END %]
+
+	<div class="prefDesc">
+	[% WRAPPER setting title="PLUGIN_PLUZZ_PREFER_LOWBITRATE" desc="PLUGIN_PLUZZ_PREFER_LOWBITRATE_DESC" %]
+
+		[% "PLUGIN_PLUZZ_LOWRES" | string %]
+		<input name="pref_prefer_lowbitrate" type="checkbox" [% IF prefs.prefer_lowbitrate %] checked [% END %]>
+
+	[% END %]
+	
+		
+	</div>
+	
+
+[% PROCESS settings/footer.html %]
