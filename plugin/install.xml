@@ -1,9 +1,9 @@
 <?xml version='1.0' standalone='yes'?>
 <extensions>
-  <version>0.1</version>
   <name>PLUGIN_PLUZZ</name>
-  <description>PLUGIN_PLUZZ_DESC</description>
   <defaultState>enabled</defaultState>
+  <version>0.11</version>
+  <description>PLUGIN_PLUZZ_DESC</description>
   <icon>plugins/Pluzz/html/images/pluzz.png</icon>
   <module>Plugins::Pluzz::Plugin</module>
   <targetApplication>

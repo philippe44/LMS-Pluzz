@@ -46,7 +46,6 @@ sub request {
 		$log->info("requested url: $args->{url} (i:$index)");
 			
 		${*$self}{vars}->{streamBytes} = 0;
-		${*$self}{vars}->{length} = 0;
 		${*$self}{vars}->{index} = $index + 1;
 				
 		return $self->SUPER::request($args);
@@ -162,22 +161,24 @@ sub sysread {
 	my $v = $self->vars;
 	my $bytes;
 	
-	if (length($v->{'inBuf'}) < MAX_INBUF && length($v->{'outBuf'}) < MAX_OUTBUF) {
-	
+	while (length($v->{'inBuf'}) < MAX_INBUF && length($v->{'outBuf'}) < MAX_OUTBUF && $v->{streaming}) {
+			
 		$bytes = CORE::sysread($self, $v->{'inBuf'}, MAX_READ, length($v->{'inBuf'}));
+		next unless defined $bytes;
 		
-		$v->{streamBytes} += $bytes || 0;
-
-		if ( !defined $bytes && $v->{streamBytes} == ${*$self}{length} ) {
-			$v->{streaming} = 0 if ( !$self->request({ song => ${*$self}{song} }) ); 
-		}	
+		$self->processTS;
+		$v->{streamBytes} += $bytes;
 		
+		$log->debug("streaming (read:$bytes) (in:", length($v->{'inBuf'}), " out: ", length($v->{'outBuf'}), " - [$v->{streamBytes} / ${*$self}{length}]");
+	
+		if ( $v->{streamBytes} == ${*$self}{length} ) {
+			$v->{streaming} = 0 if ( !$self->request({ song => ${*$self}{song} }) )
+		}
+							
 	}	
 	
-	$self->processTS;
 	my $len = length($v->{'outBuf'});
-	$log->debug("streaming (read:$bytes) (in:", length($v->{'inBuf'}), " out:$len) - [$v->{streamBytes} / ${*$self}{length}]");
-
+	
 	if ($len > 0) {
 
 		$bytes = min($len, $maxBytes);
@@ -186,16 +187,11 @@ sub sysread {
 
 		$v->{'outBuf'} = substr($v->{'outBuf'}, $bytes);
 		
-	open (my $fh, ">>", "d:/toto/frags.aac");
-	binmode $fh;
-	print $fh $_[1];
-	close $fh;
-
 		return $bytes;
 
 	} elsif (!$v->{'streaming'}) {
 
-		$log->debug("stream ended");
+		$log->info("stream ended");
 
 		$self->close;
 
@@ -203,7 +199,7 @@ sub sysread {
 
 	} elsif (!$self->connected) {
 
-		$log->debug("input socket not connected");
+		$log->info("input socket not connected");
 
 		$self->close;
 
