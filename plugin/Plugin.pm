@@ -203,7 +203,7 @@ sub searchHandler {
 				name 		=> $entry->{soustitre} || "$entry->{titre} ($date)",
 				type 		=> 'playlist',
 				on_select 	=> 'play',
-				play 		=> "pluzz://$entry->{id_diffusion}",
+				play 		=> "pluzz://$entry->{id_diffusion}&channel=$params->{channel}&program=$params->{code_programme}",
 				image 		=> "http://pluzz.francetv.fr$entry->{image_medium}",
 			};
 			

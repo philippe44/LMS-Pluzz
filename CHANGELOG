@@ -1,2 +1,3 @@
 ﻿0.11
  - optimize buffering
+ - get metadata in all cases to support RecentlyPlayed

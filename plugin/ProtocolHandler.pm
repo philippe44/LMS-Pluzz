@@ -347,7 +347,7 @@ sub getNextTrack {
 	my ($class, $song, $successCb, $errorCb) = @_;
 	my $url 	 = $song->track()->url;
 	my $client   = $song->master();
-	my $id 		 = $class->getId($url);
+	my ($id)	 = $class->getId($url);
 	
 	if (!$id) {
 		$errorCb->();
@@ -510,7 +510,8 @@ sub getMetadataFor {
 	
 	main::DEBUGLOG && $log->debug("getmetadata: $url");
 			
-	my $id = $class->getId($url) || return {};
+	my ($id, $channel, $program) = $class->getId($url);
+	return unless $id && $channel && $program;
 	
 	if (my $meta = $cache->get("pz:meta-$id")) {
 		$song->track->secs($meta->{'duration'}) if $song;
@@ -525,6 +526,19 @@ sub getMetadataFor {
 		
 		return $meta;
 	}
+	
+	Plugins::Pluzz::API->searchEpisode( sub {
+		my $result = shift;
+		my $item = 	first { $_->{id_diffusion} eq $id } @{$result || []};
+						
+		$song->track->secs($item->{duree_reelle}) if $song;
+				
+		if ($client) {
+			$client->currentPlaylistUpdateTime( Time::HiRes::time() );
+			Slim::Control::Request::notifyFromArray( $client, [ 'newmetadata' ] );
+		}	
+						
+	}, { channel => $channel, code_programme => $program } );
 	
 	return {	
 			type	=> 'Pluzz',
@@ -544,8 +558,8 @@ sub getIcon {
 sub getId {
 	my ($class, $url) = @_;
 
-	if ($url =~ m|pluzz://(\S*)|) {
-		return $1;
+	if ($url =~ m|pluzz://([^&]+)&channel=([^&]+)&program=(\S*)|) {
+		return ($1, $2, $3);
 	}
 		
 	return undef;
