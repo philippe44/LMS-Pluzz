@@ -1,14 +1,14 @@
 <?xml version='1.0' standalone='yes'?>
 <extensions>
-  <targetApplication>
-    <id>SlimServer</id>
-    <maxVersion>7.*</maxVersion>
-    <minVersion>7.7</minVersion>
-  </targetApplication>
-  <version>0.11</version>
-  <icon>plugins/Pluzz/html/images/pluzz.png</icon>
-  <name>PLUGIN_PLUZZ</name>
-  <description>PLUGIN_PLUZZ_DESC</description>
   <defaultState>enabled</defaultState>
+  <name>PLUGIN_PLUZZ</name>
+  <targetApplication>
+    <minVersion>7.7</minVersion>
+    <maxVersion>7.*</maxVersion>
+    <id>SlimServer</id>
+  </targetApplication>
+  <icon>plugins/Pluzz/html/images/pluzz.png</icon>
+  <description>PLUGIN_PLUZZ_DESC</description>
+  <version>0.20</version>
   <module>Plugins::Pluzz::Plugin</module>
 </extensions>

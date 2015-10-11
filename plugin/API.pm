@@ -1,12 +1,10 @@
 package Plugins::Pluzz::API;
 
-use strict;
+#use strict;
 
 use Digest::MD5 qw(md5_hex);
-use File::Spec::Functions qw(catdir);
 use JSON::XS::VersionOneAndTwo;
 use List::Util qw(min max);
-use URI::Escape qw(uri_escape uri_escape_utf8);
 
 use Data::Dumper;
 
@@ -15,6 +13,8 @@ use constant API_URL => 'http://pluzz.webservices.francetelevisions.fr';
 use Slim::Utils::Cache;
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
+	
+use Plugins::Pluzz::AsyncSocks;
 
 my $prefs = preferences('plugin.pluzz');
 my $log   = logger('plugin.pluzz');
@@ -76,21 +76,22 @@ sub search	{
 	my ( $cb, $params ) = @_;
 	my $url = API_URL . "/pluzz/liste/type/replay/chaine/$params->{channel}/nb/500?";
 	my $cacheKey = md5_hex($url);
+	my $cached;
 	
 	$log->debug("wanted url: $url");
 	
-	if ( my $cached = $cache->get($cacheKey) )  {
+	if ( !$prefs->get('no_cache') && ($cached = $cache->get($cacheKey)))  {
 		main::INFOLOG && $log->info("Returning cached data for: $url");
 		$cb->($cached);
 		return;
 	}
-		
-	Slim::Networking::SimpleAsyncHTTP->new(
+
+	Plugins::Pluzz::AsyncSocks->new(
 	
 		sub {
 			my $response = shift;
 			my $result = eval { decode_json($response->content) };
-						
+			
 			$result ||= {};
 			
 			$cache->set($cacheKey, $result, 900);
@@ -104,6 +105,8 @@ sub search	{
 		}
 
 	)->get($url);
+			
+	
 }
 
 

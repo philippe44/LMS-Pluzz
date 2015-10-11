@@ -1,4 +1,5 @@
 package Plugins::Pluzz::ProtocolHandler;
+#use base qw(IO::Socket::Socks Slim::Formats::RemoteStream);
 use base qw(Slim::Formats::RemoteStream);
 
 use strict;
@@ -14,6 +15,10 @@ use Slim::Utils::Log;
 use Slim::Utils::Prefs;
 use Slim::Utils::Errno;
 use Slim::Utils::Cache;
+
+use IO::Socket::Socks;
+use IO::Socket::Socks::Wrapped;
+use Plugins::Pluzz::AsyncSocks;
 
 use constant MAX_INBUF  => 102400;
 use constant MAX_OUTBUF => 4096;
@@ -33,6 +38,47 @@ use constant API_URL => 'http://pluzz.webservices.francetelevisions.fr';
 use constant API_URL_GLOBAL => 'http://webservices.francetelevisions.fr';
 
 Slim::Player::ProtocolHandlers->registerHandler('pluzz', __PACKAGE__);
+
+sub open {
+	my $class = shift;
+	my $args  = shift;
+	my $url   = $args->{'url'} || '';
+	
+	$url =~ m|(?:http)://(?:([^\@:]+):?([^\@]*)\@)?([^:/]+):*(\d*)(\S*)|i;
+	my ($server, $port, $path) = ($3, $4 || 80, $5);
+		
+	$log->info("Opening connection to $url: \n[$server on port $port with path $path]");
+
+	# Timeout MUST BE set in new
+	my $sock = $class->SUPER::new( Timeout => 10 );
+	my $wsock = $sock;
+	
+	# FIXME 
+	# not sure why this wsock/sock handing works. Was expecting to have to use wsock all
+	# the time, but there is somethign with these typeglobs that is unclear 
+	$wsock = IO::Socket::Socks::Wrapped->new( $sock, {
+			ProxyAddr => $prefs->get('socks_server'),
+			ProxyPort => $prefs->get('socks_port'),
+			SocksDebug => 0,
+			Blocking => 0,
+		} ) if $prefs->get('socks');	
+			
+	$wsock->SUPER::configure( {
+		PeerAddr => $server,
+		PeerPort => $port,
+	} ) or do {
+		$log->error("Couldn't create socket binding to $server $port");
+		return undef;
+	};
+	
+	# store a IO::Select object in ourself.
+	# used for non blocking I/O
+	${*$sock}{'song'} = $args->{'song'};
+	${*$sock}{'_sel'} = IO::Select->new($sock);
+	
+	return $sock->request($args);
+}
+
 
 sub request {
 	my $self = shift;
@@ -161,6 +207,11 @@ sub sysread {
 	my $v = $self->vars;
 	my $bytes;
 	
+	if (!$v) {
+		my $nb = $self->SUPER::sysread($_[1], $maxBytes);
+		return $nb;
+	}	
+		
 	while (length($v->{'inBuf'}) < MAX_INBUF && length($v->{'outBuf'}) < MAX_OUTBUF && $v->{streaming}) {
 			
 		$bytes = CORE::sysread($self, $v->{'inBuf'}, MAX_READ, length($v->{'inBuf'}));
@@ -393,7 +444,8 @@ sub getFragmentList {
 			#might be forbidden
 			$Cb->(undef) unless $fragmentURL;
 		
-			Slim::Networking::SimpleAsyncHTTP->new ( 
+			#Slim::Networking::SocksSimpleAsyncHTTP->new ( 
+			Plugins::Pluzz::AsyncSocks->new ( 
 				sub {
 					my $response = shift;
 					my $fragmentList = $response->content;
@@ -437,7 +489,8 @@ sub getFragmentURL {
 			#might be forbidden
 			$Cb->(undef) unless $masterURL;
 		
-			Slim::Networking::SimpleAsyncHTTP->new ( 
+			#Slim::Networking::SimpleAsyncHTTP->new ( 
+			Plugins::Pluzz::AsyncSocks->new ( 
 				sub {
 					my $response = shift;
 					my $result = $response->content;
@@ -445,11 +498,14 @@ sub getFragmentURL {
 					my $fragmentURL;
 				
 					for my $item ( split (/#EXT-X-STREAM-INF:/, $result) ) {
-						$item =~ m/BANDWIDTH=(\d+),([\S\s]*)(http\S*)/s;
-						if (defined $1 && (!defined $bw || $1 < $bw)) {
+					
+						next if ($item !~ m/BANDWIDTH=(\d+),([\S\s]*)(http\S*)/s); 
+					
+						if (!defined $bw || $1 < $bw) {
 							$bw = $1;
 							$fragmentURL = $3;
 						}
+												
 					}
 					
 					$Cb->($fragmentURL);
@@ -473,7 +529,8 @@ sub getMasterURL {
 		
 	$log->debug("getting master url for : $id");
 	
-	Slim::Networking::SimpleAsyncHTTP->new(
+	#Slim::Networking::SocksSimpleAsyncHTTP->new(
+	Plugins::Pluzz::AsyncSocks->new ( 
 		sub {
 			my $response = shift;
 			my $result = eval { decode_json($response->content) };

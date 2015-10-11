@@ -6,6 +6,11 @@ package Plugins::Pluzz::Plugin;
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
+use File::Spec::Functions;
+
+use FindBin qw($Bin);
+use lib catdir($Bin, 'Plugins', 'Pluzz', 'lib');
+use IO::Socket::Socks;
 
 use Data::Dumper;
 use Encode qw(encode decode);
@@ -61,12 +66,10 @@ sub initPlugin {
 	) );
 =cut	
 
-=comment	
 	if ( main::WEBUI ) {
 		require Plugins::Pluzz::Settings;
 		Plugins::Pluzz::Settings->new;
 	}
-=cut	
 	
 	for my $recent (reverse @{$prefs->get('recent')}) {
 		$recentlyPlayed{ $recent->{'url'} } = $recent;
@@ -78,7 +81,8 @@ sub initPlugin {
 #        |  |  |  |Function to call
 	Slim::Control::Request::addDispatch(['pluzz', 'info'], 
 		[1, 1, 1, \&cliInfoQuery]);
-
+		
+	
 }
 
 sub shutdownPlugin {

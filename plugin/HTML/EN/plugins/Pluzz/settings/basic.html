@@ -5,13 +5,25 @@
 	[% END %]
 
 	<div class="prefDesc">
-	[% WRAPPER setting title="PLUGIN_PLUZZ_PREFER_LOWBITRATE" desc="PLUGIN_PLUZZ_PREFER_LOWBITRATE_DESC" %]
+	[% WRAPPER setting title="PLUGIN_PLUZZ_SOCKS" desc="PLUGIN_PLUZZ_SOCKS_DESC" %]
 
-		[% "PLUGIN_PLUZZ_LOWRES" | string %]
-		<input name="pref_prefer_lowbitrate" type="checkbox" [% IF prefs.prefer_lowbitrate %] checked [% END %]>
+		[% "PLUGIN_PLUZZ_USESOCKS" | string %]
+		<input name="pref_socks" type="checkbox" [% IF prefs.pref_socks %] checked [% END %]>
+		
+		&nbsp[% "PLUGIN_PLUZZ_SOCKSSERVER" | string %]
+		<input type="text" class="stdedit" name="pref_socks_server" id="pref_socks_server" value="[% prefs.pref_socks_server %]" size="10">
+		
+		[% "PLUGIN_PLUZZ_SOCKSPORT" | string %]
+		<input type="text" class="stdedit" name="pref_socks_port" id="pref_socks_port" value="[% prefs.pref_socks_port %]" size="4">
 
 	[% END %]
 	
+	[% WRAPPER setting title="PLUGIN_PLUZZ_CACHE" desc="PLUGIN_PLUZZ_CACHE_DESC" %]
+
+		[% "PLUGIN_PLUZZ_DISABLECACHE" | string %]
+		<input name="pref_no_cache" type="checkbox" [% IF prefs.pref_no_cache %] checked [% END %]>
+	
+	[% END %]
 		
 	</div>
 	
