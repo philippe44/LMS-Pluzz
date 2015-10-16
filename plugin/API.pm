@@ -62,6 +62,8 @@ sub searchEpisode {
 				  icon     => "http://pluzz.francetv.fr$entry->{image_medium}",
 				  cover    => "http://pluzz.francetv.fr$entry->{image_medium}",
 				  duration => $entry->{duree_reelle},
+				  artist   => $entry->{presentateurs},
+				  album    => $entry->{titre_programme},
 				}, 900) if ( !$cache->get("pz:meta-" . $entry->{id_diffusion}) );
 		}
 		

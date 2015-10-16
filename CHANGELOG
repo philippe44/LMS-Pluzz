@@ -1,4 +1,7 @@
-﻿0.20
+﻿0.21
+ - Artist & Album name were missing
+
+0.20
  - Add socks support for geolock handling
  - Episode cache can be disabled (useful when switching on socks)
  
