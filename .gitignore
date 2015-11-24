@@ -85,3 +85,5 @@ repo*.xml
 /.gitignore
 /app
 /doc
+*.old
+*.save
