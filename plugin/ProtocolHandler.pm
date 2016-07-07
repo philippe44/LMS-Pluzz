@@ -159,7 +159,7 @@ sub requestString {
 	my $request = Slim::Player::Protocols::HTTP->requestString(@_);
 	
 	# FIXME: this is way too hacky
-	$request =~ s/close/keep-alive/;
+	$request =~ s/close/Keep-Alive/;
 	return $request;
 }
 
