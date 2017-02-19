@@ -114,7 +114,7 @@ sub new {
 		
 		$index = first { $streams->[$_]->{position} >= int $newtime } 0..scalar @$streams;
 		
-		$song->can('startOffset') ? $song->startOffset($newtime) : $song->{startOffset} = $newtime;
+		$song->can('startOffset') ? $song->startOffset($newtime) : ($song->{startOffset} = $newtime);
 		$args->{'client'}->master->remoteStreamStartTime(Time::HiRes::time() - $newtime);
 	}
 

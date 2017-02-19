@@ -1,6 +1,7 @@
 ﻿0.21.1
  - Pluzz.png renamed in lower case for Linux
  - pluzz.png image 400x400
+ - time offset had a language logic error that prevent repositioning
 
 0.21
  - Artist & Album name were missing
