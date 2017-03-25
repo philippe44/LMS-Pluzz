@@ -1,4 +1,8 @@
-﻿0.21.1
+﻿0.30.0
+ - mpeg TS parsing correction
+ - better handling of m3U acqusition
+
+0.21.1
  - Pluzz.png renamed in lower case for Linux
  - pluzz.png image 400x400
  - time offset had a language logic error that prevent repositioning

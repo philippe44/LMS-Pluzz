@@ -45,20 +45,31 @@ sub new {
 }
 
 sub get {
-	my ($self, $url) = @_;
+	my $self = shift;
 			
 	if ( $prefs->get('socks') ) {				
-		my $response = $self->{s_ua}->get($url);
+		my $response = $self->{s_ua}->get(@_);
 	
-		$self->{cb}($response) if $response->is_success;
-		$self->{ecb}(undef) if !$response->is_success;
+		if ( $response->is_success ) {
+			$self->{cb}($response);
+		} else {
+			$self->{ecb}($response);
+		}	
 		
 	} else {
 	
-		$self->{ua}->get($url);
+		$self->{ua}->get(@_);
 		
 	}
 }
+
+sub contentRef {
+	if ( $prefs->get('socks') ) {
+		return shift->content_ref;
+	} else {
+		return shift->contentRef;
+	}
+}	
 
 
 1;
