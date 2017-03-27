@@ -166,6 +166,7 @@ sub getNextTrack {
 	
 		sub {
 			my $fragments = shift;
+			my $bitrate = shift;
 					
 			return $errorCb->() unless (defined $fragments && scalar @$fragments);
 			
@@ -175,6 +176,7 @@ sub getNextTrack {
 			$song->pluginData(stream  => $server);
 			$song->pluginData(format  => 'aac');
 			$song->track->secs( $fragments->[scalar @$fragments - 1]->{position} );
+			$song->track->bitrate( $bitrate );
 			$class->getMetadataFor($client, $url, undef, $song);
 			
 			$successCb->();
@@ -214,21 +216,21 @@ sub getFragmentsUrl {
 	Plugins::Pluzz::AsyncSocks->new ( 
 		sub {
 			my $result = shift->content;
-			my $bw;
+			my $bitrate;
 			my $fragmentUrl;
 				
 			for my $item ( split (/#EXT-X-STREAM-INF:/, $result) ) {
 				next if ($item !~ m/BANDWIDTH=(\d+),([\S\s]*)(http\S*)/s); 
 					
-				if (!defined $bw || $1 < $bw) {
-					$bw = $1;
+				if (!defined $bitrate || $1 < $bitrate) {
+					$bitrate = $1;
 					$fragmentUrl = $3;
 				}
 			}
 			
 			$log->debug("fragment url: $fragmentUrl");
 			
-			getFragmentList($cb, $fragmentUrl);
+			getFragmentList($cb, $fragmentUrl, $bitrate);
 		},
 			
 		sub {
@@ -240,7 +242,7 @@ sub getFragmentsUrl {
 
 
 sub getFragmentList {
-	my ($cb, $url) = @_;
+	my ($cb, $url, $bitrate) = @_;
 			
 	Plugins::Pluzz::AsyncSocks->new ( 
 		sub {
@@ -256,7 +258,7 @@ sub getFragmentList {
 				push @fragments, { position => $position, url => $3 } if $3;
 			}	
 									
-			$cb->(\@fragments);
+			$cb->(\@fragments, $bitrate);
 		},	
 			
 		sub {

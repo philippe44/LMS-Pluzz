@@ -1,4 +1,7 @@
-﻿0.30.0
+﻿0.31.0
+ - add bitrate display
+ 
+0.30.0
  - mpeg TS parsing correction
  - better handling of M3U acqusition
  - new fragment downloader: use Handler instead of RemoteStream to avoid using Keep-Alive (pause now works)

@@ -64,6 +64,7 @@ sub searchEpisode {
 				  duration => $entry->{duree_reelle},
 				  artist   => $entry->{presentateurs},
 				  album    => $entry->{titre_programme},
+				  type	   => 'Pluzz',
 				}, 900) if ( !$cache->get("pz:meta-" . $entry->{id_diffusion}) );
 		}
 		
