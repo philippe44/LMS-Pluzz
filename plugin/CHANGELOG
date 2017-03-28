@@ -1,4 +1,7 @@
-﻿0.31.0
+﻿0.31.1
+ - force sampling rate to 48000
+ 
+0.31.0
  - add bitrate display
  
 0.30.0
