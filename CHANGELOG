@@ -1,5 +1,7 @@
 ﻿0.31.1
  - force sampling rate to 48000
+ - do not parse MPEG buffer if empty
+ - wrong assignation of contentRef
  
 0.31.0
  - add bitrate display

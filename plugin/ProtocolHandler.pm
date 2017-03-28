@@ -123,7 +123,7 @@ sub sysread {
 			
 		Plugins::Pluzz::AsyncSocks->new(
 			sub {
-				$v->{'inBuf'} = $_[0] = Plugins::Pluzz::AsyncSocks::contentRef($_[0]);
+				$v->{'inBuf'} = Plugins::Pluzz::AsyncSocks::contentRef($_[0]);
 				$v->{'fetching'} = 0;
 				$log->debug("got chunk length: ", length ${$v->{'inBuf'}});
 			},
@@ -140,7 +140,9 @@ sub sysread {
 		return undef;
 	}	
 				
-	my $len = Plugins::Pluzz::MPEGTS::processTS($v, \$_[1], $maxBytes);
+	my $len;
+	
+	$len = Plugins::Pluzz::MPEGTS::processTS($v, \$_[1], $maxBytes) if defined $v->{inBuf};
 			
 	return $len if $len;
 	
