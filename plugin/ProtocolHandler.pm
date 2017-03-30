@@ -17,12 +17,6 @@ use Slim::Utils::Cache;
 use Plugins::Pluzz::AsyncSocks;
 use Plugins::Pluzz::MPEGTS;
 
-# streaming states
-use constant SYNCHRO     => 1;
-use constant PIDPAT	     => 2;
-use constant PIDPMT	     => 3;
-use constant AUDIO	     => 4;
-
 my $log   = logger('plugin.pluzz');
 my $prefs = preferences('plugin.pluzz');
 my $cache = Slim::Utils::Cache->new;
@@ -55,7 +49,7 @@ sub new {
 		${*$self}{'song'}    = $args->{'song'};
 		${*$self}{'vars'} = {         # variables which hold state for this instance: (created by "open")
 			'inBuf'       => undef,   #  reference to buffer of received packets
-			'state'       => SYNCHRO, #  mpeg2ts decoder state
+			'state'       => Plugins::Pluzz::MPEGTS::SYNCHRO, #  mpeg2ts decoder state
 			'index'  	  => $index,  #  current index in fragments
 			'fetching'    => 0,		  #  flag for waiting chunk data
 			'pos'		  => 0,		  #  position in the latest input buffer
@@ -140,9 +134,7 @@ sub sysread {
 		return undef;
 	}	
 				
-	my $len;
-	
-	$len = Plugins::Pluzz::MPEGTS::processTS($v, \$_[1], $maxBytes) if defined $v->{inBuf};
+	my $len = Plugins::Pluzz::MPEGTS::processTS($v, \$_[1], $maxBytes);
 			
 	return $len if $len;
 	
@@ -179,14 +171,56 @@ sub getNextTrack {
 			$song->pluginData(format  => 'aac');
 			$song->track->secs( $fragments->[scalar @$fragments - 1]->{position} );
 			$song->track->bitrate( $bitrate );
-			$song->track->samplerate( 48000 );
 			$class->getMetadataFor($client, $url, undef, $song);
 			
-			$successCb->();
+			getSampleRate( $fragments->[0]->{url}, sub {
+							my $sampleRate = shift || 48000;
+							$song->track->samplerate( $sampleRate );
+							$successCb->();
+						} );
+
 		} , $id 
 		
 	);
 }	
+
+
+sub getSampleRate {
+	use bytes;
+	
+	my ($url, $cb) = @_;
+	
+	Plugins::Pluzz::AsyncSocks->new ( 
+	sub {
+			my $data = shift->content;
+					
+			return $cb->( undef ) if !defined $data;
+			
+			my $adts;
+			my $v = { 'inBuf' => \$data,
+					  'pos'   => 0, 
+					  'state' => Plugins::LCI::MPEGTS::SYNCHRO } ;
+			my $len = Plugins::Pluzz::MPEGTS::processTS($v, \$adts, 256); # must be more than 188
+			
+			return $cb->( undef ) if !$len || (unpack('n', substr($adts, 0, 2)) & 0xFFF0 != 0xFFF0);
+						
+			my $sampleRate = (unpack('C', substr($adts, 2, 1)) & 0x3c) >> 2;
+			my @rates = ( 96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 
+						  12000, 11025, 8000, 7350, undef, undef, undef );
+						
+			$sampleRate = $rates[$sampleRate];			
+			$log->info("AAC samplerate: $sampleRate");
+			$cb->( $sampleRate );
+		},
+
+		sub {
+			$log->warn("HTTP error, cannot find sample rate");
+			$cb->( undef );
+		},
+
+	)->get( $url, 'Range' => 'bytes=0-16384' );
+
+}
 
 
 sub getFragments {

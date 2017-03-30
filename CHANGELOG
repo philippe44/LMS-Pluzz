@@ -1,4 +1,7 @@
-﻿0.31.1
+﻿0.32.0 
+ - auto detect samplerate in ADTS (used when converting to PCM)
+
+0.31.1
  - force sampling rate to 48000
  - do not parse MPEG buffer if empty
  - wrong assignation of contentRef
