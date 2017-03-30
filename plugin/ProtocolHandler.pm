@@ -171,13 +171,16 @@ sub getNextTrack {
 			$song->pluginData(format  => 'aac');
 			$song->track->secs( $fragments->[scalar @$fragments - 1]->{position} );
 			$song->track->bitrate( $bitrate );
+			$class->getMetadataFor($client, $url, undef, $song);
 						
 			getSampleRate( $fragments->[0]->{url}, sub {
 							my $sampleRate = shift || 48000;
 							
 							$song->track->samplerate( $sampleRate );
-							$class->getMetadataFor($client, $url, undef, $song);
-																				
+							
+							$client->currentPlaylistUpdateTime( Time::HiRes::time() );
+							Slim::Control::Request::notifyFromArray( $client, [ 'newmetadata' ] );
+																					
 							$successCb->();
 						} );
 						
@@ -323,14 +326,13 @@ sub suppressPlayersMessage {
 sub getMetadataFor {
 	my ($class, $client, $url, undef, $song) = @_;
 	my $icon = $class->getIcon();
-	my $meta;
-	
+		
 	main::DEBUGLOG && $log->debug("getmetadata: $url");
 			
 	my ($id, $channel, $program) = $class->getId($url);
 	return unless $id && $channel && $program;
 	
-	if ($meta = $cache->get("pz:meta-$id")) {
+	if ( my $meta = $cache->get("pz:meta-$id") ) {
 		$song->track->secs($meta->{'duration'}) if $song;
 				
 		Plugins::Pluzz::Plugin->updateRecentlyPlayed({
@@ -338,32 +340,40 @@ sub getMetadataFor {
 			name  => $meta->{_fulltitle} || $meta->{title}, 
 			icon  => $meta->{icon},
 		});
-
+		
 		main::DEBUGLOG && $log->debug("cache hit: $id");
-	
-	} else {
-		Plugins::Pluzz::API->searchEpisode( sub {
-			my $result = shift;
-			my $item = 	first { $_->{id_diffusion} eq $id } @{$result || []};
+		
+		return $meta;
+	}	
+		
+	Plugins::Pluzz::API->searchEpisode( sub {
+		my $result = shift;
+		my $item = 	first { $_->{id_diffusion} eq $id } @{$result || []};
 						
-			$song->track->secs($item->{duree_reelle}) if $song;
-							
-		}, { channel => $channel, code_programme => $program } );
+		$song->track->secs($item->{duree_reelle}) if $song;
+		
+		if ($client) {
+			$client->currentPlaylistUpdateTime( Time::HiRes::time() );
+			Slim::Control::Request::notifyFromArray( $client, [ 'newmetadata' ] );
+		}
+	}, { channel => $channel, code_programme => $program } );
 			
-		$meta = { type	=> 'Pluzz',
-				  title	=> "Pluzz",
-			      icon	=> $icon,
-			      cover	=> $icon,
-			    };
-	}			
+	return { type	=> 'Pluzz',
+			 title	=> "Pluzz",
+			 icon	=> $icon,
+			 cover	=> $icon,
+			};
+}	
+
+
+sub updateMetadata {
+	my $client = shift;
 	
 	if ($client) {
 		$client->currentPlaylistUpdateTime( Time::HiRes::time() );
 		Slim::Control::Request::notifyFromArray( $client, [ 'newmetadata' ] );
 	}
-		
-	return $meta;	
-}	
+}
 	
 sub getIcon {
 	my ( $class, $url ) = @_;
