@@ -4,8 +4,6 @@ use base qw(IO::Handle);
 use strict;
 
 use List::Util qw(first);
-#use HTML::Parser;
-#use URI::Escape;
 use JSON::XS;
 use Data::Dumper;
 
@@ -31,7 +29,6 @@ sub new {
 	my $args  = shift;
 	my $song  = $args->{'song'};
 	my $index = 0;
-	my ($server, $port) = Slim::Utils::Misc::crackURL(@{$song->pluginData('streams')}[0]->{url});
 	my $seekdata   = $song->can('seekdata') ? $song->seekdata : $song->{'seekdata'};
 		
 	if ( my $newtime = $seekdata->{'timeOffset'} ) {
@@ -169,22 +166,20 @@ sub getNextTrack {
 			$song->pluginData(streams => $fragments);	
 			$song->pluginData(stream  => $server);
 			$song->pluginData(format  => 'aac');
-			$song->track->secs( $fragments->[scalar @$fragments - 1]->{position} );
 			$song->track->bitrate( $bitrate );
-			$class->getMetadataFor($client, $url, undef, $song);
-						
+									
 			getSampleRate( $fragments->[0]->{url}, sub {
-							my $sampleRate = shift || 48000;
+				my $sampleRate = shift || 48000;
 							
-							$song->track->samplerate( $sampleRate );
+				$song->track->samplerate( $sampleRate );
 							
-							$client->currentPlaylistUpdateTime( Time::HiRes::time() );
-							Slim::Control::Request::notifyFromArray( $client, [ 'newmetadata' ] );
-																					
-							$successCb->();
-						} );
+				$client->currentPlaylistUpdateTime( Time::HiRes::time() );
+				Slim::Control::Request::notifyFromArray( $client, [ 'newmetadata' ] );
+																				
+				$successCb->();
+			} );
 						
-		} , $id 
+		} , $id, $song 
 		
 	);
 }	
@@ -229,15 +224,17 @@ sub getSampleRate {
 
 
 sub getFragments {
-	my ($cb, $id) = @_;
+	my ($cb, $id, $song) = @_;
 	my $url = API_URL_GLOBAL . "/tools/getInfosOeuvre/v2/?catalogue=Pluzz&idDiffusion=$id";
 		
-	$log->debug("getting master url for : $id");
+	$log->error("getting master url for : $url, $id");
 	
 	Plugins::Pluzz::AsyncSocks->new ( 
 		sub {
 			my $result = decode_json(shift->content);
 			my $master = first { $_->{format} eq 'm3u8-download' } @{$result->{videos}};
+			
+			$song->track->secs( $result->{real_duration} );
 			
 			$log->debug("master url: $master->{url}");
 			
@@ -311,20 +308,8 @@ sub getFragmentList {
 }	
 
 
-sub suppressPlayersMessage {
-	my ($class, $client, $song, $string) = @_;
-
-	# suppress problem opening message if we have more streams to try
-	if ($string eq 'PROBLEM_OPENING' && scalar @{$song->pluginData('streams') || []}) {
-		return 1;
-	}
-
-	return undef;
-}
-
-
 sub getMetadataFor {
-	my ($class, $client, $url, undef, $song) = @_;
+	my ($class, $client, $url) = @_;
 	my $icon = $class->getIcon();
 		
 	main::DEBUGLOG && $log->debug("getmetadata: $url");
@@ -333,8 +318,7 @@ sub getMetadataFor {
 	return unless $id && $channel && $program;
 	
 	if ( my $meta = $cache->get("pz:meta-$id") ) {
-		$song->track->secs($meta->{'duration'}) if $song;
-				
+						
 		Plugins::Pluzz::Plugin->updateRecentlyPlayed({
 			url   => $url, 
 			name  => $meta->{_fulltitle} || $meta->{title}, 
@@ -350,12 +334,11 @@ sub getMetadataFor {
 		my $result = shift;
 		my $item = 	first { $_->{id_diffusion} eq $id } @{$result || []};
 						
-		$song->track->secs($item->{duree_reelle}) if $song;
-		
 		if ($client) {
 			$client->currentPlaylistUpdateTime( Time::HiRes::time() );
 			Slim::Control::Request::notifyFromArray( $client, [ 'newmetadata' ] );
 		}
+		
 	}, { channel => $channel, code_programme => $program } );
 			
 	return { type	=> 'Pluzz',
@@ -366,15 +349,6 @@ sub getMetadataFor {
 }	
 
 
-sub updateMetadata {
-	my $client = shift;
-	
-	if ($client) {
-		$client->currentPlaylistUpdateTime( Time::HiRes::time() );
-		Slim::Control::Request::notifyFromArray( $client, [ 'newmetadata' ] );
-	}
-}
-	
 sub getIcon {
 	my ( $class, $url ) = @_;
 

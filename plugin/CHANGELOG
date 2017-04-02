@@ -1,4 +1,10 @@
-﻿0.33.0
+﻿0.34.1
+ - code cleaning
+ 
+0.34.0
+ - track duration set at the right place
+ 
+0.33.0
  - force metadata update so that bitrate is displayed automatically
  
 0.32.0 
