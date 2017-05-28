@@ -25,6 +25,8 @@ use Plugins::Pluzz::ListProtocolHandler;
 
 my $WEBLINK_SUPPORTED_UA_RE = qr/iPeng|SqueezePad|OrangeSqueeze/i;
 
+use constant IMAGE_URL => 'http://refonte.webservices.francetelevisions.fr';
+
 my	$log = Slim::Utils::Log->addLogCategory({
 	'category'     => 'plugin.pluzz',
 	'defaultLevel' => 'WARN',
@@ -177,7 +179,7 @@ sub channelsHandler {
 				name  => $entry->{titre_programme},
 				type  => 'playlist',
 				url   => \&searchHandler,
-				image => "http://pluzz.francetv.fr$entry->{image_medium}",
+				image => IMAGE_URL . "$entry->{image_medium}",
 				passthrough 	=> [ { %${params}, code_programme => $entry->{code_programme} } ],
 				favorites_url  	=> "pzplaylist://channel=$params->{channel}&program=$entry->{code_programme}",
 				favorites_type 	=> 'audio',
@@ -208,7 +210,7 @@ sub searchHandler {
 				type 		=> 'playlist',
 				on_select 	=> 'play',
 				play 		=> "pluzz://$entry->{id_diffusion}&channel=$params->{channel}&program=$params->{code_programme}",
-				image 		=> "http://pluzz.francetv.fr$entry->{image_medium}",
+				image 		=> IMAGE_URL . "$entry->{image_medium}",
 			};
 			
 		}

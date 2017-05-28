@@ -9,6 +9,7 @@ use List::Util qw(min max);
 use Data::Dumper;
 
 use constant API_URL => 'http://pluzz.webservices.francetelevisions.fr';
+use constant IMAGE_URL => 'http://refonte.webservices.francetelevisions.fr';
 
 use Slim::Utils::Cache;
 use Slim::Utils::Log;
@@ -59,8 +60,8 @@ sub searchEpisode {
 			
 			$cache->set("pz:meta-" . $entry->{id_diffusion}, 
 				{ title  => $entry->{soustitre} || "$entry->{titre} ($date)",
-				  icon     => "http://pluzz.francetv.fr$entry->{image_medium}",
-				  cover    => "http://pluzz.francetv.fr$entry->{image_medium}",
+				  icon     => IMAGE_URL . "$entry->{image_medium}",
+				  cover    => IMAGE_URL . "$entry->{image_medium}",
 				  duration => $entry->{duree_reelle},
 				  artist   => $entry->{presentateurs},
 				  album    => $entry->{titre_programme},
