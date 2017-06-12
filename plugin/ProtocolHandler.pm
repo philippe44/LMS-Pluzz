@@ -199,7 +199,7 @@ sub getSampleRate {
 			my $adts;
 			my $v = { 'inBuf' => \$data,
 					  'pos'   => 0, 
-					  'state' => Plugins::LCI::MPEGTS::SYNCHRO } ;
+					  'state' => Plugins::Pluzz::MPEGTS::SYNCHRO } ;
 			my $len = Plugins::Pluzz::MPEGTS::processTS($v, \$adts, 256); # must be more than 188
 			
 			return $cb->( undef ) if !$len || (unpack('n', substr($adts, 0, 2)) & 0xFFF0 != 0xFFF0);
