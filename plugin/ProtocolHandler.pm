@@ -12,7 +12,6 @@ use Slim::Utils::Prefs;
 use Slim::Utils::Errno;
 use Slim::Utils::Cache;
 
-use Plugins::Pluzz::AsyncSocks;
 use Plugins::Pluzz::MPEGTS;
 
 my $log   = logger('plugin.pluzz');
@@ -111,10 +110,12 @@ sub sysread {
 		$v->{'fetching'} = 1;
 						
 		$log->info("fetching: $url");
-			
-		Plugins::Pluzz::AsyncSocks->new(
+		
+		my $socks = { socksAddr => $prefs->get('socks_server'), socksPort => $prefs->get('socks_port') } if $prefs->get('socks'); 
+	
+		Slim::Networking::SimpleAsyncHTTP->new(
 			sub {
-				$v->{'inBuf'} = Plugins::Pluzz::AsyncSocks::contentRef($_[0]);
+				$v->{'inBuf'} = $_[0]->contentRef;
 				$v->{'fetching'} = 0;
 				$log->debug("got chunk length: ", length ${$v->{'inBuf'}});
 			},
@@ -125,6 +126,7 @@ sub sysread {
 				$v->{'fetching'} = 0;
 			}, 
 			
+			$socks
 		)->get($url);
 			
 		$! = EINTR;
@@ -189,8 +191,9 @@ sub getSampleRate {
 	use bytes;
 	
 	my ($url, $cb) = @_;
+	my $socks = { socksAddr => $prefs->get('socks_server'), socksPort => $prefs->get('socks_port') } if $prefs->get('socks'); 
 	
-	Plugins::Pluzz::AsyncSocks->new ( 
+	Slim::Networking::SimpleAsyncHTTP->new ( 
 	sub {
 			my $data = shift->content;
 					
@@ -217,6 +220,8 @@ sub getSampleRate {
 			$log->warn("HTTP error, cannot find sample rate");
 			$cb->( undef );
 		},
+		
+		$socks
 
 	)->get( $url, 'Range' => 'bytes=0-16384' );
 
@@ -226,10 +231,11 @@ sub getSampleRate {
 sub getFragments {
 	my ($cb, $id, $song) = @_;
 	my $url = API_URL_GLOBAL . "/tools/getInfosOeuvre/v2/?catalogue=Pluzz&idDiffusion=$id";
+	my $socks = { socksAddr => $prefs->get('socks_server'), socksPort => $prefs->get('socks_port') } if $prefs->get('socks'); 
 		
-	$log->error("getting master url for : $url, $id");
+	$log->info("getting master url for : $url, $id");
 	
-	Plugins::Pluzz::AsyncSocks->new ( 
+	Slim::Networking::SimpleAsyncHTTP->new ( 
 		sub {
 			my $result = decode_json(shift->content);
 			my $master = first { $_->{format} eq 'm3u8-download' } @{$result->{videos}};
@@ -244,6 +250,8 @@ sub getFragments {
 		sub {
 			$cb->(undef);
 		},
+		
+		$socks
 
 	)->get($url);
 }
@@ -251,8 +259,9 @@ sub getFragments {
 
 sub getFragmentsUrl {
 	my ($cb, $url) = @_;
+	my $socks = { socksAddr => $prefs->get('socks_server'), socksPort => $prefs->get('socks_port') } if $prefs->get('socks'); 
 				
-	Plugins::Pluzz::AsyncSocks->new ( 
+	Slim::Networking::SimpleAsyncHTTP->new ( 
 		sub {
 			my $result = shift->content;
 			my $bitrate;
@@ -274,7 +283,9 @@ sub getFragmentsUrl {
 			
 		sub {
 			$cb->(undef);
-		}
+		},
+		
+		$socks
 		
 	)->get($url);
 }	
@@ -282,8 +293,9 @@ sub getFragmentsUrl {
 
 sub getFragmentList {
 	my ($cb, $url, $bitrate) = @_;
+	my $socks = { socksAddr => $prefs->get('socks_server'), socksPort => $prefs->get('socks_port') } if $prefs->get('socks'); 
 			
-	Plugins::Pluzz::AsyncSocks->new ( 
+	Slim::Networking::SimpleAsyncHTTP->new ( 
 		sub {
 			my $fragmentList = shift->content;
 			my @fragments;
@@ -302,7 +314,9 @@ sub getFragmentList {
 			
 		sub {
 			$cb->(undef);
-		}
+		},
+		
+		$socks,
 					
 	)->get($url);
 }	

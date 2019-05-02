@@ -1,5 +1,8 @@
-﻿0.35.2
-   - Add "settings" link in plugin page
+﻿0.40.0
+- use non-blocking socks
+
+0.35.2
+ - Add "settings" link in plugin page
    
 0.35.1
  - Wrong const (LCI)

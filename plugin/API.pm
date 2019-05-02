@@ -15,8 +15,6 @@ use Slim::Utils::Cache;
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
 	
-use Plugins::Pluzz::AsyncSocks;
-
 my $prefs = preferences('plugin.pluzz');
 my $log   = logger('plugin.pluzz');
 my $cache = Slim::Utils::Cache->new();
@@ -89,8 +87,10 @@ sub search	{
 		$cb->($cached);
 		return;
 	}
+	
+	my $socks = { socksAddr => $prefs->get('socks_server'), socksPort => $prefs->get('socks_port') } if $prefs->get('socks'); 
 
-	Plugins::Pluzz::AsyncSocks->new(
+	Slim::Networking::SimpleAsyncHTTP->new(
 	
 		sub {
 			my $response = shift;
@@ -106,7 +106,9 @@ sub search	{
 		sub {
 			$log->error($_[1]);
 			$cb->( { error => $_[1] } );
-		}
+		},
+		
+		$socks,
 
 	)->get($url);
 			
