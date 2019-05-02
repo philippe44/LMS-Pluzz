@@ -24,9 +24,9 @@ use Plugins::Pluzz::ProtocolHandler;
 use Plugins::Pluzz::ListProtocolHandler;
 
 # override default Slim::Networking::SimpleAsyncHTTP
-use Plugins::Pluzz::slim::SimpleAsyncHTTP;
+use Plugins::Pluzz::Slim::SimpleAsyncHTTP;
 # override default Slim::Networking::Async::HTTP
-use Plugins::Pluzz::slim::HTTP;
+eval { require Plugins::Pluzz::Slim::HTTP };
 
 my $WEBLINK_SUPPORTED_UA_RE = qr/iPeng|SqueezePad|OrangeSqueeze/i;
 

@@ -1,9 +1,5 @@
-﻿0.40.0
- - use non-blocking socks
- - bump socks version to 0.74
-
-0.35.2
- - Add "settings" link in plugin page
+﻿0.35.2
+   - Add "settings" link in plugin page
    
 0.35.1
  - Wrong const (LCI)

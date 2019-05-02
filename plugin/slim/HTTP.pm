@@ -10,9 +10,6 @@ package Slim::Networking::Async::HTTP;
 
 use strict;
 
-# use Slim::Networking::Async::Socket::HTTPsocks;
-use Plugins::Pluzz::slim::HTTPsocks;
-
 my $log = logger('network.asynchttp');
 
 __PACKAGE__->mk_accessor( rw => qw(
@@ -83,18 +80,25 @@ sub new_socket {
 	}
 	# BEGIN - create socks HTTP instance
 	elsif ($self->socksAddr) {
+		# use Slim::Networking::Async::Socket::HTTPsocks;
+		require Plugins::Pluzz::slim::HTTPSocks;
+		
 		my %args = @_;
-		main::DEBUGLOG && $log->debug("Using SOCKS proxy ", $self->socksAddr, ":", $self->socksPort);
+		
 		# for socks handshake, socket must be blocking (need to work of that)
-		my $sock = Slim::Networking::Async::Socket::HTTPsocks->new( @_, 
+		my $sock = Slim::Networking::Async::Socket::HTTPSocks->new( @_, 
 			ProxyAddr => $self->socksAddr,
 			ProxyPort => $self->socksPort,
 			ConnectAddr => $args{Host},
 			ConnectPort => $args{PeerPort},
 			Blocking => 1,
 		);
+		
 		$sock->blocking(0);
-		retunr $sock;
+		
+		main::DEBUGLOG && $log->debug("Using SOCKS proxy ", $self->socksAddr, ":", $self->socksPort);
+		
+		return $sock;
 	}
 	# END
 	else { 	

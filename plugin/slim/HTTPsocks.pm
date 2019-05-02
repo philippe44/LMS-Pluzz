@@ -1,4 +1,4 @@
-package Slim::Networking::Async::Socket::HTTPsocks;
+package Slim::Networking::Async::Socket::HTTPSocks;
 
 use strict;
 
