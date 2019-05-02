@@ -81,7 +81,7 @@ sub new_socket {
 	# BEGIN - create socks HTTP instance
 	elsif ($self->socksAddr) {
 		# use Slim::Networking::Async::Socket::HTTPsocks;
-		require Plugins::Pluzz::slim::HTTPSocks;
+		require Plugins::Pluzz::Slim::HTTPSocks;
 		
 		my %args = @_;
 		
