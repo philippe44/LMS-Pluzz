@@ -84,15 +84,17 @@ sub new_socket {
 	# BEGIN - create socks HTTP instance
 	elsif ($self->socksAddr) {
 		my %args = @_;
-		main::DEBUGLOG && $log->debug("Using SOCKS proxy", $self->socksAddr, ":", $self->socksAddr);
-		return Slim::Networking::Async::Socket::HTTPsocks->new( @_, 
+		main::DEBUGLOG && $log->debug("Using SOCKS proxy ", $self->socksAddr, ":", $self->socksPort);
+		# for socks handshake, socket must be blocking (need to work of that)
+		my $sock = Slim::Networking::Async::Socket::HTTPsocks->new( @_, 
 			ProxyAddr => $self->socksAddr,
 			ProxyPort => $self->socksPort,
 			ConnectAddr => $args{Host},
 			ConnectPort => $args{PeerPort},
-			Blocking => 0,
-			SocksDebug => 0,
+			Blocking => 1,
 		);
+		$sock->blocking(0);
+		retunr $sock;
 	}
 	# END
 	else { 	

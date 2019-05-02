@@ -8,7 +8,7 @@ use Carp;
 use vars qw( $SOCKET_CLASS @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $VERSION $SOCKS_ERROR $SOCKS5_RESOLVE $SOCKS4_RESOLVE $SOCKS_DEBUG %CODES );
 require Exporter;
 
-$VERSION = '0.67';
+$VERSION = '0.74';
 
 use constant {
 	SOCKS_WANT_READ  => 20,
@@ -129,7 +129,7 @@ use constant {
 
 $CODES{REPLY}->{&REQUEST_GRANTED}         = "request granted";
 $CODES{REPLY}->{&REQUEST_FAILED}          = "request rejected or failed";
-$CODES{REPLY}->{&REQUEST_REJECTED_IDENTD} = "request rejected becasue SOCKS server cannot connect to identd on the client";
+$CODES{REPLY}->{&REQUEST_REJECTED_IDENTD} = "request rejected because SOCKS server cannot connect to identd on the client";
 $CODES{REPLY}->{&REQUEST_REJECTED_USERID} = "request rejected because the client program and identd report different user-ids";
 
 # queue
@@ -143,7 +143,7 @@ use constant {
 	Q_DEBUGS => 6,
 };
 
-
+our $CAN_CHANGE_SOCKET = 1;
 sub new_from_fd {
 	my ($class, $sock, %arg) = @_;
 
@@ -155,7 +155,11 @@ sub new_from_fd {
 	}
 
 	scalar(%arg) or return $sock;
-	return $sock->configure(\%arg);
+	
+	# do not allow to create new socket
+	local $CAN_CHANGE_SOCKET = 0;
+	$sock->configure(\%arg) || $SOCKS_ERROR == SOCKS_WANT_WRITE || return;
+	$sock;
 }
 
 *new_from_socket = \&new_from_fd;
@@ -172,19 +176,14 @@ sub start_SOCKS {
 
 	${*$sock}->{SOCKS} = { RequireAuth => 0 };
 
+	$SOCKS_ERROR->set();
 	return $sock->command(%arg) ? $sock : undef;
 }
 
 sub socket {
 	my $self = shift;
 
-	if (-S $self) {
-		${*$self}{'io_socket_domain'} ||= $_[0];
-		${*$self}{'io_socket_type'}   ||= $_[1];
-		${*$self}{'io_socket_proto'}  ||= $_[2];
-		return $self;
-	}
-
+	return $self unless $CAN_CHANGE_SOCKET;
 	return $self->SUPER::socket(@_);
 }
 
@@ -328,11 +327,13 @@ sub _configure {
 		}
 		${*$self}->{SOCKS}->{CmdAddr} = delete($args->{UdpAddr});
 		${*$self}->{SOCKS}->{CmdPort} = delete($args->{UdpPort});
-		$args->{LocalAddr} = ${*$self}->{SOCKS}->{CmdAddr};
-		$args->{LocalPort} = ${*$self}->{SOCKS}->{CmdPort};
 		${*$self}->{SOCKS}->{TCP} = __PACKAGE__->new(    # TCP backend for UDP socket
-			Timeout => $args->{Timeout},
-			Proto   => 'tcp'
+			Timeout  => $args->{Timeout},
+			Proto    => 'tcp',
+			PeerAddr => $args->{ProxyAddr},
+			PeerPort => $args->{ProxyPort},
+			exists $args->{Blocking} ?
+				(Blocking => $args->{Blocking}) : ()
 		) or return;
 	}
 	elsif (exists($args->{ConnectAddr}) && exists($args->{ConnectPort})) {
@@ -356,17 +357,26 @@ sub connect {
 
 	my $ok =
 	  defined(${*$self}->{SOCKS}->{TCP})
-	  ? ${*$self}->{SOCKS}->{TCP}->SUPER::connect(@_)
+	  ? 1
 	  : $self->SUPER::connect(@_);
 
-	if (($! == EINPROGRESS || $! == EWOULDBLOCK) && $self->blocking == 0) {
+	if (($! == EINPROGRESS || $! == EWOULDBLOCK) && 
+	    (${*$self}->{SOCKS}->{TCP} || $self)->blocking == 0) {
+		${*$self}->{SOCKS}->{_in_progress} = 1;
 		$SOCKS_ERROR->set(SOCKS_WANT_WRITE, 'Socks want write');
 	}
 	elsif (!$ok) {
 		$SOCKS_ERROR->set($!, $@ = "Connection to proxy failed: $!");
 		return;
 	}
+	else {
+		# connect() may be called several times by SUPER class
+		$SOCKS_ERROR->set();
+	}
 
+	return $ok # proxy address was not specified, so do not make socks handshake
+		unless ${*$self}->{SOCKS}->{ProxyAddr} && ${*$self}->{SOCKS}->{ProxyPort};
+	
 	$self->_connect();
 }
 
@@ -401,12 +411,38 @@ sub _connect {
 		];
 	}
 
-	if ($SOCKS_ERROR == undef) {    # socket connection estabilished
+	if (delete ${*$self}->{SOCKS}->{_in_progress}) { # socket connection not estabilished yet
+		if ($self->isa('IO::Socket::IP')) {
+			# IO::Socket::IP requires multiple connect calls
+			# when performing non-blocking multi-homed connect
+			unshift @{ ${*$self}->{SOCKS}->{queue} }, ['_socket_connect', [], undef, [], 0];
+			
+			# IO::Socket::IP::connect() returns false for non-blocking connections in progress
+			# IO::Socket::INET::connect() returns true for non-blocking connections in progress
+			# LOL
+			return; # connect() return value
+		}
+	}
+	else {
 		defined($self->_run_queue())
-		  or return;
+			or return;
 	}
 
 	return $self;
+}
+
+sub _socket_connect {
+	my $self = shift;
+	my $sock = ${*$self}->{SOCKS}->{TCP} || $self;
+	
+	return 1 if $sock->SUPER::connect();
+	if ($! == EINPROGRESS || $! == EWOULDBLOCK) {
+		$SOCKS_ERROR->set(SOCKS_WANT_WRITE, 'Socks want write');
+		return -1;
+	}
+	
+	$SOCKS_ERROR->set($!, $@ = "Connection to proxy failed: $!");
+	return;
 }
 
 sub _run_queue {
@@ -427,7 +463,7 @@ sub _run_queue {
 		}
 
 		last if ($retval == -1);
-		${*$self}->{SOCKS}->{queue_results}{ $elt->[Q_SUB] } = $retval;
+		${*$self}->{SOCKS}->{queue_results}{$sub} = $retval;
 		if ($elt->[Q_OKCB]) {
 			$elt->[Q_OKCB]->();
 		}
@@ -2114,11 +2150,13 @@ Both takes the following config hash:
   BindPort => Port of the remote machine which will
               connect to the proxy server after bind request
   
-  UdpAddr => Associate UDP socket on the server with this client
-             hostname
+  UdpAddr => Expected address where datagrams will be sent. Fill it with address
+             of all zeros if address is not known at this moment.
+             Proxy server may use this information to limit access to the association.
   
-  UdpPort => Associate UDP socket on the server with this client
-             port
+  UdpPort => Expected port where datagrams will be sent. Use zero port
+             if port is not known at this moment. Proxy server may use this
+             information to limit access to the association.
   
   AuthType => What kind of authentication to support:
               none       - no authentication (default)
@@ -2208,6 +2246,12 @@ Example:
         else {
             die $SOCKS_ERROR;
         }
+        
+        # NOTE: when base class ($IO::Socket::Socks::SOCKET_CLASS) is IO::Socket::IP
+        # and you are using kqueue or epoll to check for readable/writable sockets
+        # you need to readd $sock to kqueue/epoll after each call to ready() (actually until socket will be connected to proxy server),
+        # because IO::Socket::IP may change internal socket of $sock for milti-homed hosts.
+        # There is no such problem when you are using select/poll
     }
     
     # you may want to return socket to blocking state by $sock->blocking(1)
@@ -2390,7 +2434,7 @@ is.  The REPLY CODE is one of the constants as follows (integer value):
   For socks v4
   REQUEST_GRANTED(90): request granted
   REQUEST_FAILED(91): request rejected or failed
-  REQUEST_REJECTED_IDENTD(92): request rejected becasue SOCKS server cannot connect to identd on the client
+  REQUEST_REJECTED_IDENTD(92): request rejected because SOCKS server cannot connect to identd on the client
   REQUEST_REJECTED_USERID(93): request rejected because the client program and identd report different user-ids
   
   For socks v5
@@ -2450,7 +2494,7 @@ By default it tries to use C<IO::Socket::IP> 0.36+ as socket class. And falls
 back to C<IO::Socket::INET> if not available. You can set C<$IO::Socket::Socks::SOCKET_CLASS>
 before loading of C<IO::Socket::Socks> and then it will not try to detect proper base class
 itself. You can also set it after loading of C<IO::Socket::Socks> and this will automatically
-update C<@ISA>, so you shouldn't worry about inheritence.
+update C<@ISA>, so you shouldn't worry about inheritance.
 
 =head1 CONSTANTS
 
