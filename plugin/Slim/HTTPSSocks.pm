@@ -10,14 +10,14 @@ sub new {
 	
 	# create a SOCKS object and connect
 	my $sock = IO::Socket::Socks->new(@_);
+	$sock->blocking(0);
 		
 	# now create the SOCKS object and it will call connect below 
 	IO::Socket::SSL->start_SSL($sock, @_);
-	
+		
 	# as we inherit from IO::Socket::SSL, we can bless to our base class
 	bless $sock;
 }
-
 
 sub close {
 	my $self = shift;

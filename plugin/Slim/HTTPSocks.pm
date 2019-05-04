@@ -4,6 +4,15 @@ use strict;
 
 use base qw(IO::Socket::Socks Net::HTTP::Methods Slim::Networking::Async::Socket);
 
+sub new {
+	my ($class) = shift;
+	
+	my $sock = $class->SUPER::new(@_);
+	$sock->blocking(0);
+
+	bless $sock;
+}
+
 sub close {
 	my $self = shift;
 

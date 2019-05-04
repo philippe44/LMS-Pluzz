@@ -48,12 +48,13 @@ sub new_socket {
 	
 	if ($self->socksAddr) {
 		require Plugins::Pluzz::Slim::HTTPSocks;
-		require Plugins::Pluzz::Slim::HTTPSSocks;
-		%socks = ( 	ProxyAddr => $self->socksAddr,
-					ProxyPort => $self->socksPort,
-					ConnectAddr => $args{PeerAddr} || $args{Host},
-					ConnectPort => $args{PeerPort},
-					Blocking => 1,
+		require Plugins::Pluzz::Slim::HTTPSSocks if hasSSL();
+		%socks = ( 	
+			ProxyAddr => $self->socksAddr,
+			ProxyPort => $self->socksPort,
+			ConnectAddr => $args{PeerAddr} || $args{Host},
+			ConnectPort => $args{PeerPort},
+			Blocking => 1,
 		);
 		main::DEBUGLOG && $log->debug("Using SOCKS proxy ", $self->socksAddr, ":", $self->socksPort);
 	}	
@@ -63,7 +64,6 @@ sub new_socket {
 	# BEGIN - too many small changes to describe one by one
 	if ( $self->request->uri->scheme eq 'https' ) {
 		if ( hasSSL() ) {
-			my $sock;
 			# From http://bugs.slimdevices.com/show_bug.cgi?id=18152:
 			# We increasingly find servers *requiring* use of the SNI extension to TLS.
 			# IO::Socket::SSL supports this and, in combination with the Net:HTTPS 'front-end',
@@ -75,10 +75,11 @@ sub new_socket {
 			
 			# First, try without explicit SNI, so we don't inadvertently break anything. 
 			# (This is the 'old' behaviour.) (Probably overly conservative.)
+			
+			my $sock;
 	
 			if (%socks) {
 				$sock = Slim::Networking::Async::Socket::HTTPSSocks->new( %args, %socks );
-				$sock->blocking(0);
 			}
 			else {		
 				$sock = Slim::Networking::Async::Socket::HTTPS->new( @_ );
@@ -89,9 +90,7 @@ sub new_socket {
 			$args{SSL_hostname} = $args{Host};
 			$args{SSL_verify_mode} = Net::SSLeay::VERIFY_NONE();
 			if (%socks) {
-				$sock = Slim::Networking::Async::Socket::HTTPSSocks->new( %socks, %args );
-				$sock->blocking(0);
-				return $sock;
+				return Slim::Networking::Async::Socket::HTTPSSocks->new( %socks, %args );
 			}
 			else {		
 				return Slim::Networking::Async::Socket::HTTPS->new( %args );
@@ -105,9 +104,7 @@ sub new_socket {
 			
 			if (%socks) {
 				$socks{ConnectPort} => $args{PeerPort};
-				my $sock = Slim::Networking::Async::Socket::HTTPSocks->new( %socks, %args );
-				$sock->blocking(0);
-				return $sock;
+				return Slim::Networking::Async::Socket::HTTPSocks->new( %socks, %args );
 			}
 			else {		
 				return Slim::Networking::Async::Socket::HTTP->new( %args );
@@ -115,9 +112,7 @@ sub new_socket {
 		}
 	}
 	elsif (%socks) {
-		my $sock = Slim::Networking::Async::Socket::HTTPSocks->new( %args, %socks );
-		$sock->blocking(0);
-		return $sock;
+		return Slim::Networking::Async::Socket::HTTPSocks->new( %args, %socks );
 	}
 	# END
 	else { 	
