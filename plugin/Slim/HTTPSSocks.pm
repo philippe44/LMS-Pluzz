@@ -6,10 +6,11 @@ use IO::Socket::Socks;
 use base qw(IO::Socket::SSL IO::Socket::Socks Net::HTTP::Methods Slim::Networking::Async::Socket);
 
 sub new {
-	my ($class) = shift;
+	my ($class, %args) = @_;
 	
 	# create a SOCKS object and connect
-	my $sock = IO::Socket::Socks->new(@_);
+	$args{SocksVersion} ||= 4;
+	my $sock = IO::Socket::Socks->new(%args) || return;
 	$sock->blocking(0);
 		
 	# now create the SOCKS object and it will call connect below 

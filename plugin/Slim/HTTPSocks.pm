@@ -5,9 +5,10 @@ use strict;
 use base qw(IO::Socket::Socks Net::HTTP::Methods Slim::Networking::Async::Socket);
 
 sub new {
-	my ($class) = shift;
+	my ($class, %args) = @_;
 	
-	my $sock = $class->SUPER::new(@_);
+	$args{SocksVersion} ||= 4;
+	my $sock = $class->SUPER::new(%args) || return;
 	$sock->blocking(0);
 
 	bless $sock;
@@ -15,7 +16,7 @@ sub new {
 
 sub close {
 	my $self = shift;
-
+	
 	# remove self from select loop
 	Slim::Networking::Select::removeError($self);
 	Slim::Networking::Select::removeRead($self);

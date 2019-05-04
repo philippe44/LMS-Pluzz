@@ -76,7 +76,6 @@ $RECYCLE.BIN/
 
 *.cmd
 *.pl
-*.zip
 repo*.xml
 *.txt
 /_backup
