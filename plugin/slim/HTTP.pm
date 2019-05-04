@@ -41,10 +41,29 @@ sub new_socket {
 			PeerPort => $pport || 80,
 		);
 	}
+
+	# BEGIN - add socks arguments
+	my %args = @_;
+	my %socks = ();
+	
+	if ($self->socksAddr) {
+		require Plugins::Pluzz::Slim::HTTPSocks;
+		require Plugins::Pluzz::Slim::HTTPSSocks;
+		%socks = ( 	ProxyAddr => $self->socksAddr,
+					ProxyPort => $self->socksPort,
+					ConnectAddr => $args{PeerAddr} || $args{Host},
+					ConnectPort => $args{PeerPort},
+					Blocking => 1,
+		);
+		main::DEBUGLOG && $log->debug("Using SOCKS proxy ", $self->socksAddr, ":", $self->socksPort);
+	}	
+	# END	
 	
 	# Create SSL socket if URI is https
+	# BEGIN - too many small changes to describe one by one
 	if ( $self->request->uri->scheme eq 'https' ) {
 		if ( hasSSL() ) {
+			my $sock;
 			# From http://bugs.slimdevices.com/show_bug.cgi?id=18152:
 			# We increasingly find servers *requiring* use of the SNI extension to TLS.
 			# IO::Socket::SSL supports this and, in combination with the Net:HTTPS 'front-end',
@@ -53,51 +72,51 @@ sub new_socket {
 			# DNS lookup.
 			# So we will probably need to explicitly set "SSL_hostname" if we are to succeed with such
 			# a server.
-
+			
 			# First, try without explicit SNI, so we don't inadvertently break anything. 
 			# (This is the 'old' behaviour.) (Probably overly conservative.)
-			my $sock = Slim::Networking::Async::Socket::HTTPS->new( @_ );
+	
+			if (%socks) {
+				$sock = Slim::Networking::Async::Socket::HTTPSSocks->new( %args, %socks );
+				$sock->blocking(0);
+			}
+			else {		
+				$sock = Slim::Networking::Async::Socket::HTTPS->new( @_ );
+			}	
 			return $sock if $sock;
 
 			# Failed. Try again with an explicit SNI.
-			my %args = @_;
 			$args{SSL_hostname} = $args{Host};
 			$args{SSL_verify_mode} = Net::SSLeay::VERIFY_NONE();
-			return Slim::Networking::Async::Socket::HTTPS->new( %args );
+			if (%socks) {
+				$sock = Slim::Networking::Async::Socket::HTTPSSocks->new( %socks, %args );
+				$sock->blocking(0);
+				return $sock;
+			}
+			else {		
+				return Slim::Networking::Async::Socket::HTTPS->new( %args );
+			}
 		}
 		else {
 			# change the request to port 80
 			$self->request->uri->scheme( 'http' );
 			$self->request->uri->port( 80 );
-			
-			my %args = @_;
 			$args{PeerPort} = 80;
 			
-			$log->warn("Warning: trying HTTP request to HTTPS server");
-			
-			return Slim::Networking::Async::Socket::HTTP->new( %args );
+			if (%socks) {
+				$socks{ConnectPort} => $args{PeerPort};
+				my $sock = Slim::Networking::Async::Socket::HTTPSocks->new( %socks, %args );
+				$sock->blocking(0);
+				return $sock;
+			}
+			else {		
+				return Slim::Networking::Async::Socket::HTTP->new( %args );
+			}
 		}
 	}
-	# BEGIN - create socks HTTP instance
-	elsif ($self->socksAddr) {
-		# use Slim::Networking::Async::Socket::HTTPsocks;
-		require Plugins::Pluzz::Slim::HTTPSocks;
-		
-		my %args = @_;
-		
-		# for socks handshake, socket must be blocking (need to work of that)
-		my $sock = Slim::Networking::Async::Socket::HTTPSocks->new( @_, 
-			ProxyAddr => $self->socksAddr,
-			ProxyPort => $self->socksPort,
-			ConnectAddr => $args{Host},
-			ConnectPort => $args{PeerPort},
-			Blocking => 1,
-		);
-		
+	elsif (%socks) {
+		my $sock = Slim::Networking::Async::Socket::HTTPSocks->new( %args, %socks );
 		$sock->blocking(0);
-		
-		main::DEBUGLOG && $log->debug("Using SOCKS proxy ", $self->socksAddr, ":", $self->socksPort);
-		
 		return $sock;
 	}
 	# END
