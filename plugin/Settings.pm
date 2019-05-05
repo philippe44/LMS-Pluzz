@@ -17,7 +17,7 @@ sub page {
 }
 
 sub prefs {
-	return (preferences('plugin.pluzz'), qw(socks socks_server socks_port socks_user socks_password no_cache));
+	return (preferences('plugin.pluzz'), qw(socks no_cache));
 }
 
 sub handler {

@@ -8,11 +8,6 @@ use strict;
 use base qw(Slim::Plugin::OPMLBased);
 use File::Spec::Functions;
 
-use FindBin qw($Bin);
-use lib catdir($Bin, 'Plugins', 'Pluzz', 'lib');
-use IO::Socket::Socks;
-
-use Data::Dumper;
 use Encode qw(encode decode);
 
 use Slim::Utils::Strings qw(string cstring);
@@ -21,12 +16,7 @@ use Slim::Utils::Log;
 
 # see if HTTPSocks is available
 eval "require Slim::Networking::Async::Socket::HTTPSocks";
-if ($@) {
-	# override default Slim::Networking::SimpleAsyncHTTP
-	eval "require Plugins::Pluzz::Slim::SimpleAsyncHTTP";
-	# override default Slim::Networking::Async::HTTP
-	eval "require Plugins::Pluzz::Slim::HTTP";
-}	
+die ("this plugin needs HTTPSocks to work") if ($@);
 
 use Plugins::Pluzz::API;
 use Plugins::Pluzz::ProtocolHandler;

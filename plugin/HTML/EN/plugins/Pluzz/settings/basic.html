@@ -6,38 +6,12 @@
 
 	<div class="prefDesc">
 	[% WRAPPER setting title="PLUGIN_PLUZZ_SOCKS" desc="PLUGIN_PLUZZ_SOCKS_DESC" %]
-
-		<table>
-		<tr>
-		<td>[% "PLUGIN_PLUZZ_USESOCKS" | string %]&nbsp</td>
-		<td><input name="pref_socks" type="checkbox" [% IF prefs.pref_socks %] checked [% END %]></td></tr>
-		
-		<tr>
-		<td>[% "PLUGIN_PLUZZ_SOCKSSERVER" | string %]</td>
-		<td>
-		<input type="text" class="stdedit" name="pref_socks_server" id="pref_socks_server" value="[% prefs.pref_socks_server %]" size="20">
-		
-		&nbsp[% "PLUGIN_PLUZZ_SOCKSPORT" | string %]
-		<input type="text" class="stdedit" name="pref_socks_port" id="pref_socks_port" value="[% prefs.pref_socks_port %]" size="2">
-		</td></tr>
-		
-		<tr>
-		<td>[% "PLUGIN_PLUZZ_SOCKSUSER" | string %]</td>
-		<td>
-		<input type="text" class="stdedit" name="pref_socks_user" id="pref_socks_user" value="[% prefs.pref_socks_user %]" size="20">
-		
-		&nbsp[% "PLUGIN_PLUZZ_SOCKSPASSWORD" | string %]
-		<input type="password" class="stdedit" name="pref_socks_password" id="pref_socks_password" value="[% prefs.pref_socks_password %]" size="10">
-		</td></tr>
-		</table>
-
+		<input name="pref_socks" type="checkbox" [% IF prefs.pref_socks %] checked [% END %]>
 	[% END %]
 	
 	[% WRAPPER setting title="PLUGIN_PLUZZ_CACHE" desc="PLUGIN_PLUZZ_CACHE_DESC" %]
-
 		[% "PLUGIN_PLUZZ_DISABLECACHE" | string %]
 		<input name="pref_no_cache" type="checkbox" [% IF prefs.pref_no_cache %] checked [% END %]>
-	
 	[% END %]
 		
 	</div>
