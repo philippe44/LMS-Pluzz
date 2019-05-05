@@ -8,8 +8,14 @@ use base qw(IO::Socket::SSL IO::Socket::Socks Net::HTTP::Methods Slim::Networkin
 sub new {
 	my ($class, %args) = @_;
 	
+	if ($args{Username}) {
+		$args{SocksVersion} = 5;
+		$args{AuthType} = 'userpass';
+	} else {	 
+		$args{SocksVersion} ||= 4;
+	}	
+		
 	# create a SOCKS object and connect
-	$args{SocksVersion} ||= 4;
 	my $sock = IO::Socket::Socks->new(%args) || return;
 	$sock->blocking(0);
 		

@@ -19,14 +19,18 @@ use Slim::Utils::Strings qw(string cstring);
 use Slim::Utils::Prefs;
 use Slim::Utils::Log;
 
+# see if HTTPSocks is available
+eval "require Slim::Networking::Async::Socket::HTTPSocks";
+if ($@) {
+	# override default Slim::Networking::SimpleAsyncHTTP
+	eval "require Plugins::Pluzz::Slim::SimpleAsyncHTTP";
+	# override default Slim::Networking::Async::HTTP
+	eval "require Plugins::Pluzz::Slim::HTTP";
+}	
+
 use Plugins::Pluzz::API;
 use Plugins::Pluzz::ProtocolHandler;
 use Plugins::Pluzz::ListProtocolHandler;
-
-# override default Slim::Networking::SimpleAsyncHTTP
-use Plugins::Pluzz::Slim::SimpleAsyncHTTP;
-# override default Slim::Networking::Async::HTTP
-eval { require Plugins::Pluzz::Slim::HTTP };
 
 my $WEBLINK_SUPPORTED_UA_RE = qr/iPeng|SqueezePad|OrangeSqueeze/i;
 

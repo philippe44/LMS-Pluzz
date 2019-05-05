@@ -13,18 +13,16 @@ use strict;
 my $log = logger('network.asynchttp');
 
 __PACKAGE__->mk_accessor( rw => qw(
-	socksAddr socksPort
+	socks
 ) );
 
-# BEGIN - new method
 sub new {
 	my ($class, $args) = @_;
 	my $self = $class->SUPER::new;
-	$self->socksAddr( $args->{socksAddr} ); 
-	$self->socksPort( $args->{socksPort} || 1080 ); 
+	# don't need to mk_accessor a hash as we don't need individual key access
+	$self->socks($args->{socks});
 	return $self;
 }
-# END
 
 sub new_socket {
 	my $self = shift;
@@ -41,27 +39,25 @@ sub new_socket {
 			PeerPort => $pport || 80,
 		);
 	}
-
-	# BEGIN - add socks arguments
+	
 	my %args = @_;
 	my %socks = ();
 	
-	if ($self->socksAddr) {
+	if ($self->socks) {
 		require Plugins::Pluzz::Slim::HTTPSocks;
 		require Plugins::Pluzz::Slim::HTTPSSocks if hasSSL();
-		%socks = ( 	
-			ProxyAddr => $self->socksAddr,
-			ProxyPort => $self->socksPort,
+
+		%socks = ( 
+			%{$self->socks},
 			ConnectAddr => $args{PeerAddr} || $args{Host},
 			ConnectPort => $args{PeerPort},
 			Blocking => 1,
 		);
-		main::DEBUGLOG && $log->debug("Using SOCKS proxy ", $self->socksAddr, ":", $self->socksPort);
+
+		main::DEBUGLOG && $log->debug("Using SOCKS proxy ", $socks{ProxyAddr}, ":", $socks{ProxyPort});
 	}	
-	# END	
 	
 	# Create SSL socket if URI is https
-	# BEGIN - too many small changes to describe one by one
 	if ( $self->request->uri->scheme eq 'https' ) {
 		if ( hasSSL() ) {
 			# From http://bugs.slimdevices.com/show_bug.cgi?id=18152:
@@ -75,11 +71,11 @@ sub new_socket {
 			
 			# First, try without explicit SNI, so we don't inadvertently break anything. 
 			# (This is the 'old' behaviour.) (Probably overly conservative.)
+
+			my $sock;			
 			
-			my $sock;
-	
 			if (%socks) {
-				$sock = Slim::Networking::Async::Socket::HTTPSSocks->new( %args, %socks );
+				$sock = Slim::Networking::Async::Socket::HTTPSSocks->new( %socks, %args  );
 			}
 			else {		
 				$sock = Slim::Networking::Async::Socket::HTTPS->new( @_ );
@@ -112,9 +108,8 @@ sub new_socket {
 		}
 	}
 	elsif (%socks) {
-		return Slim::Networking::Async::Socket::HTTPSocks->new( %args, %socks );
+		return Slim::Networking::Async::Socket::HTTPSocks->new( %socks, %args );
 	}
-	# END
 	else { 	
 		return Slim::Networking::Async::Socket::HTTP->new( @_ );
 	}

@@ -19,6 +19,16 @@ my $prefs = preferences('plugin.pluzz');
 my $log   = logger('plugin.pluzz');
 my $cache = Slim::Utils::Cache->new();
 
+sub getSocks {
+	return {
+		socks => {
+			ProxyAddr => $prefs->get('socks_server'), 
+			ProxyPort => $prefs->get('socks_port'),
+			Username => $prefs->get('socks_user'),
+			Password => $prefs->get('socks_password'),
+		}	
+	} if $prefs->get('socks'); 
+}
 
 sub searchProgram {
 	my ( $class, $cb, $params ) = @_;
@@ -88,8 +98,6 @@ sub search	{
 		return;
 	}
 	
-	my $socks = { socksAddr => $prefs->get('socks_server'), socksPort => $prefs->get('socks_port') } if $prefs->get('socks'); 
-
 	Slim::Networking::SimpleAsyncHTTP->new(
 	
 		sub {
@@ -108,11 +116,10 @@ sub search	{
 			$cb->( { error => $_[1] } );
 		},
 		
-		$socks,
+		getSocks,
 
 	)->get($url);
 			
-	
 }
 
 

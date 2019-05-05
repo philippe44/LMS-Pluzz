@@ -7,7 +7,13 @@ use base qw(IO::Socket::Socks Net::HTTP::Methods Slim::Networking::Async::Socket
 sub new {
 	my ($class, %args) = @_;
 	
-	$args{SocksVersion} ||= 4;
+	if ($args{Username}) {
+		$args{SocksVersion} = 5;
+		$args{AuthType} = 'userpass';
+	} else {	 
+		$args{SocksVersion} ||= 4;
+	}	
+	
 	my $sock = $class->SUPER::new(%args) || return;
 	$sock->blocking(0);
 
