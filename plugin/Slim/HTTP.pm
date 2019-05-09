@@ -2,11 +2,15 @@ package Slim::Networking::Async::HTTP;
 
 use strict;
 
-__PACKAGE__->mk_accessor( rw => qw(
-	socks
-) );
+use Slim::Utils::Log;
 
-my $base = 'Pluzz';
+if (!__PACKAGE__->can('socks')) {
+	__PACKAGE__->mk_accessor( rw => qw(
+		socks
+	) );
+}	
+
+my $log = logger('network.asynchttp');
 
 sub new {
 	my ($class, $args) = @_;
@@ -14,8 +18,8 @@ sub new {
 	
 	if ( $args->{socks} ) {
 		eval {
-			require "Plugins::$base::Slim::HTTPSocks";
-			require "Plugins::$base::Slim::HTTPSSocks";
+			#require Slim::Networking::Async::Socket::HTTPSocks;
+			#require Slim::Networking::Async::Socket::HTTPSSocks if hasSSL();
 		};
 	
 		if (!$@) {			

@@ -6,25 +6,30 @@ package Plugins::Pluzz::Plugin;
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
-use File::Spec::Functions;
 
+use File::Spec::Functions;
 use Encode qw(encode decode);
+
+use FindBin qw($Bin);
+use lib catdir($Bin, 'Plugins', 'Pluzz', 'lib');
 
 use Slim::Utils::Strings qw(string cstring);
 use Slim::Utils::Prefs;
 use Slim::Utils::Log;
 
-# see if HTTP(S)Socks is available
-eval "require Slim::Networking::Async::Socket::HTTPSocks";
-if ($@) {
-	eval "require Plugins::Pluzz::Slim::HTTPSocks";
-	eval "require Plugins::Pluzz::Slim::HTTPSSocks";
-	eval "require Plugins::Pluzz::Slim::Misc";
-}
-
 use Plugins::Pluzz::API;
 use Plugins::Pluzz::ProtocolHandler;
 use Plugins::Pluzz::ListProtocolHandler;
+
+# see if HTTP(S)Socks is available
+eval "require Slim::Networking::Async::Socket::HTTPSocks";
+if ($@) {
+	require Plugins::Pluzz::Slim::HTTP;
+	require Plugins::Pluzz::Slim::HTTPSocks;
+	require Plugins::Pluzz::Slim::HTTPSSocks;
+	require Plugins::Pluzz::Slim::SimpleAsyncHTTP;
+	require Plugins::Pluzz::Slim::Misc;
+}
 
 my $WEBLINK_SUPPORTED_UA_RE = qr/iPeng|SqueezePad|OrangeSqueeze/i;
 
