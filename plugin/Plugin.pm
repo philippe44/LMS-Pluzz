@@ -14,9 +14,13 @@ use Slim::Utils::Strings qw(string cstring);
 use Slim::Utils::Prefs;
 use Slim::Utils::Log;
 
-# see if HTTPSocks is available
+# see if HTTP(S)Socks is available
 eval "require Slim::Networking::Async::Socket::HTTPSocks";
-die ("this plugin needs HTTPSocks to work") if ($@);
+if ($@) {
+	eval "require Plugins::Pluzz::Slim::HTTPSocks";
+	eval "require Plugins::Pluzz::Slim::HTTPSSocks";
+	eval "require Plugins::Pluzz::Slim::Misc";
+}
 
 use Plugins::Pluzz::API;
 use Plugins::Pluzz::ProtocolHandler;

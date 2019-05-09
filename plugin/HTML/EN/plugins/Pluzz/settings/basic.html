@@ -5,16 +5,25 @@
 	[% END %]
 
 	<div class="prefDesc">
-	[% WRAPPER setting title="PLUGIN_PLUZZ_SOCKS" desc="PLUGIN_PLUZZ_SOCKS_DESC" %]
-		<input name="pref_socks" type="checkbox" [% IF prefs.pref_socks %] checked [% END %]>
-	[% END %]
-	
 	[% WRAPPER setting title="PLUGIN_PLUZZ_CACHE" desc="PLUGIN_PLUZZ_CACHE_DESC" %]
-		[% "PLUGIN_PLUZZ_DISABLECACHE" | string %]
 		<input name="pref_no_cache" type="checkbox" [% IF prefs.pref_no_cache %] checked [% END %]>
 	[% END %]
+	
+	[% WRAPPER setting title="PLUGIN_PLUZZ_SOCKS" desc="PLUGIN_PLUZZ_SOCKS_DESC" %]
+		<input name="pref_socks" type="checkbox" [% IF prefs.pref_socks %] checked [% END %]>
+	[% END %]		
 		
-	</div>
+	[% WRAPPER setting title="PLUGIN_PLUZZ_SOCKSPROXY" desc="" %]
+		<input type=text class="stdedit" name="pref_socksProxy" id="socksProxy" value="[% prefs.pref_socksProxy %]" size="40">
+	[% END %]
+	
+	[% WRAPPER setting title="PLUGIN_PLUZZ_SOCKSUSERNAME" desc="" %]
+		<input type=text class="stdedit" name="pref_socksUsername" id="socksUsername" value="[% prefs.pref_socksUsername %]" size="40">
+	[% END %]
+		
+	[% WRAPPER setting title="PLUGIN_PLUZZ_SOCKSPASSWORD" desc="" %]
+		<input type=password class="stdedit" name="pref_socksPassword" id="socksPassword" value="[% prefs.pref_socksPassword %]" size="40">
+	[% END %]
 	
 
 [% PROCESS settings/footer.html %]

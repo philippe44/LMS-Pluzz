@@ -1,4 +1,7 @@
-﻿0.40.1
+﻿0.40.2
+ - roll back LMS change requirement
+ 
+0.40.1
  - add SSL through socks
  - requires updated LMS
  

@@ -1,12 +1,10 @@
 package Plugins::Pluzz::API;
 
-#use strict;
+use strict;
 
 use Digest::MD5 qw(md5_hex);
 use JSON::XS::VersionOneAndTwo;
 use List::Util qw(min max);
-
-use Data::Dumper;
 
 use constant API_URL => 'http://pluzz.webservices.francetelevisions.fr';
 use constant IMAGE_URL => 'http://refonte.webservices.francetelevisions.fr';
@@ -14,15 +12,22 @@ use constant IMAGE_URL => 'http://refonte.webservices.francetelevisions.fr';
 use Slim::Utils::Cache;
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
+use Slim::Utils::Misc qw(unobfuscate);
 	
 my $prefs = preferences('plugin.pluzz');
 my $log   = logger('plugin.pluzz');
 my $cache = Slim::Utils::Cache->new();
 
 sub getSocks {
+	my ($server, $port) = split (/:/, $prefs->get('socksProxy'));
 	return {
-		socks => $prefs->get('socks') 
-	};		
+		socks => {
+			ProxyAddr => $server,
+			ProxyPort => $port,
+			Username => unobfuscate($prefs->get('socksUsername')),
+			Password => unobfuscate($prefs->get('socksPassword')),
+		}	
+	};	
 }
 
 sub searchProgram {

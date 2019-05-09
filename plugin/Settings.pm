@@ -5,7 +5,9 @@ use strict;
 
 use Slim::Utils::Prefs;
 use Slim::Utils::Log;
+use Slim::Utils::Misc qw(obfuscate unobfuscate);
 
+my $prefs = preferences('plugin.pluzz');
 my $log = logger('plugin.pluzz');
 
 sub name {
@@ -17,14 +19,24 @@ sub page {
 }
 
 sub prefs {
-	return (preferences('plugin.pluzz'), qw(socks no_cache));
+	return (preferences('plugin.pluzz'), qw(socks socksProxy socksUsername socksPassword no_cache));
 }
 
 sub handler {
-	my ($class, $client, $params, $callback, @args) = @_;
+	my ($class, $client, $paramRef, $pageSetup) = @_;
 	
-	$callback->($client, $params, $class->SUPER::handler($client, $params), @args);
+	if ($paramRef->{'saveSettings'}) {
+		$paramRef->{'pref_socksUsername'} = obfuscate($paramRef->{'pref_socksUsername'});
+		$paramRef->{'pref_socksPassword'} = obfuscate($paramRef->{'pref_socksPassword'});
+	}
+	
+	return $class->SUPER::handler($client, $paramRef, $pageSetup);
 }
 
+sub beforeRender  {
+	my ($class, $paramRef) = @_;
+	$paramRef->{'prefs'}->{'pref_socksUsername'} = unobfuscate($prefs->get('socksUsername'));
+	$paramRef->{'prefs'}->{'pref_socksPassword'} = unobfuscate($prefs->get('socksPassword'));
+}
 	
 1;
