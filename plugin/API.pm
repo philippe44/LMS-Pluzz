@@ -5,6 +5,7 @@ use strict;
 use Digest::MD5 qw(md5_hex);
 use JSON::XS::VersionOneAndTwo;
 use List::Util qw(min max);
+use Exporter qw(import);
 
 use constant API_URL => 'http://pluzz.webservices.francetelevisions.fr';
 use constant IMAGE_URL => 'http://refonte.webservices.francetelevisions.fr';
@@ -12,7 +13,8 @@ use constant IMAGE_URL => 'http://refonte.webservices.francetelevisions.fr';
 use Slim::Utils::Cache;
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
-use Slim::Utils::Misc qw(unobfuscate);
+
+our @EXPORT = qw(obfuscate deobfuscate);
 	
 my $prefs = preferences('plugin.pluzz');
 my $log   = logger('plugin.pluzz');
@@ -24,8 +26,8 @@ sub getSocks {
 		socks => {
 			ProxyAddr => $server,
 			ProxyPort => $port,
-			Username => unobfuscate($prefs->get('socksUsername')),
-			Password => unobfuscate($prefs->get('socksPassword')),
+			Username => deobfuscate($prefs->get('socksUsername')),
+			Password => deobfuscate($prefs->get('socksPassword')),
 		}	
 	};	
 }
@@ -120,6 +122,16 @@ sub search	{
 
 	)->get($url);
 			
+}
+
+sub obfuscate {
+  # this is vain unless we have a machine-specific ID	
+  return MIME::Base64::encode(scalar(reverse(unpack('H*', $_[0]))));
+}
+
+sub deobfuscate {
+  # this is vain unless we have a machine-specific ID	
+  return pack('H*', scalar(reverse(MIME::Base64::decode($_[0]))));
 }
 
 

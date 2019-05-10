@@ -5,7 +5,7 @@ use strict;
 
 use Slim::Utils::Prefs;
 use Slim::Utils::Log;
-use Slim::Utils::Misc qw(obfuscate unobfuscate);
+use Plugins::Pluzz::API;
 
 my $prefs = preferences('plugin.pluzz');
 my $log = logger('plugin.pluzz');
@@ -35,8 +35,8 @@ sub handler {
 
 sub beforeRender  {
 	my ($class, $paramRef) = @_;
-	$paramRef->{'prefs'}->{'pref_socksUsername'} = unobfuscate($prefs->get('socksUsername'));
-	$paramRef->{'prefs'}->{'pref_socksPassword'} = unobfuscate($prefs->get('socksPassword'));
+	$paramRef->{'prefs'}->{'pref_socksUsername'} = deobfuscate($prefs->get('socksUsername'));
+	$paramRef->{'prefs'}->{'pref_socksPassword'} = deobfuscate($prefs->get('socksPassword'));
 }
 	
 1;
