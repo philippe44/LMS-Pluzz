@@ -5,6 +5,7 @@ use strict;
 use Digest::MD5 qw(md5_hex);
 use JSON::XS::VersionOneAndTwo;
 use List::Util qw(min max);
+use MIME::Base64;
 use Exporter qw(import);
 
 use constant API_URL => 'http://pluzz.webservices.francetelevisions.fr';
