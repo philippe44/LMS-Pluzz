@@ -1,4 +1,7 @@
-﻿0.40.2
+﻿0.41.0
+ - need LMS version that supports HTTPSocks
+ 
+0.40.2
  - roll back LMS change requirement
  
 0.40.1
