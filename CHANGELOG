@@ -1,4 +1,9 @@
-﻿0.41.0
+﻿0.42.0
+ - Increase LMS max version
+ 
+0.41.1
+ - Use 'socks' boolean
+0.41.0
  - need LMS version that supports HTTPSocks
  
 0.40.2

@@ -22,6 +22,7 @@ my $log   = logger('plugin.pluzz');
 my $cache = Slim::Utils::Cache->new();
 
 sub getSocks {
+	return undef unless $prefs->get('socks');
 	my ($server, $port) = split (/:/, $prefs->get('socksProxy'));
 	return {
 		socks => {
