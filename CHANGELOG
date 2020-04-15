@@ -1,8 +1,12 @@
-﻿0.42.0
- - Increase LMS max version
+﻿0.50.0
+ - memorize last position
+ 
+0.42.0
+ - increase LMS max version
  
 0.41.1
- - Use 'socks' boolean
+ - use 'socks' boolean
+ 
 0.41.0
  - need LMS version that supports HTTPSocks
  

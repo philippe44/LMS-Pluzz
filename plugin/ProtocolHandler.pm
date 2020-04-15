@@ -29,8 +29,11 @@ sub new {
 	my $song  = $args->{'song'};
 	my $index = 0;
 	my $seekdata   = $song->can('seekdata') ? $song->seekdata : $song->{'seekdata'};
-		
-	if ( my $newtime = $seekdata->{'timeOffset'} ) {
+	
+	# erase last position from cache
+	$cache->remove("pz:lastpos-" . ($class->getId($args->{'url'}))[0]);
+	
+	if ( my $newtime = ($seekdata->{'timeOffset'} || $song->pluginData('lastpos')) ) {
 		my $streams = \@{$args->{song}->pluginData('streams')};
 		
 		$index = first { $streams->[$_]->{position} >= int $newtime } 0..scalar @$streams;
@@ -53,6 +56,22 @@ sub new {
 	}
 
 	return $self;
+}
+
+sub onStop {
+    my ($class, $song) = @_;
+
+	# return if $song->pluginData('liveStream');
+	
+	my $elapsed = $song->master->controller->playingSongElapsed;
+	my ($id) = $class->getId($song->track->url);
+	
+	if ($elapsed < $song->duration - 15) {
+		$cache->set("pz:lastpos-$id", int ($elapsed), '30days');
+		$log->info("Last position for $id is $elapsed");
+	} else {
+		$cache->remove("pz:lastpos-$id");
+	}	
 }
 
 sub contentType { 'aac' }
@@ -145,6 +164,10 @@ sub getNextTrack {
 	my ($class, $song, $successCb, $errorCb) = @_;
 	my $url 	 = $song->track()->url;
 	my $client   = $song->master();
+	
+	$song->pluginData(lastpos => ($url =~ /&lastpos=([\d]+)/)[0] || 0);
+	$url =~ s/&lastpos=[\d]*//;				
+	
 	my ($id)	 = $class->getId($url);
 
 	$log->info("getNextTrack : $url (id: $id)");
@@ -322,7 +345,8 @@ sub getMetadataFor {
 	my $icon = $class->getIcon();
 		
 	main::DEBUGLOG && $log->debug("getmetadata: $url");
-			
+
+	$url =~ s/&lastpos=[\d]*//;				
 	my ($id, $channel, $program) = $class->getId($url);
 	return unless $id && $channel && $program;
 	
@@ -368,7 +392,7 @@ sub getIcon {
 sub getId {
 	my ($class, $url) = @_;
 
-	if ($url =~ m|pluzz://([^&]+)&channel=([^&]+)&program=(\S*)|) {
+	if ($url =~ m|pluzz://([^&]+)&channel=([^&]+)&program=([^&]+)|) {
 		return ($1, $2, $3);
 	}
 		

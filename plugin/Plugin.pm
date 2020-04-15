@@ -151,13 +151,35 @@ sub recentHandler {
 	my @menu;
 
 	for my $item(reverse values %recentlyPlayed) {
-		unshift  @menu, {
-			name => $item->{'name'},
-			play => $item->{'url'},
-			on_select => 'play',
-			image => $item->{'icon'},
-			type => 'playlist',
-		};
+		my ($id) = Plugins::Pluzz::ProtocolHandler->getId($item->{'url'});
+		
+		if (my $lastpos = $cache->get("pz:lastpos-$id")) {
+			my $position = Slim::Utils::DateTime::timeFormat($lastpos);
+			$position =~ s/^0+[:\.]//;
+				
+			unshift  @menu, {
+				name => $item->{'name'},
+				image => $item->{'icon'},
+				type => 'link',
+				items => [ {
+						title => cstring(undef, 'PLUGIN_PLUZZ_PLAY_FROM_BEGINNING'),
+						type   => 'audio',
+						url    => $item->{'url'},
+					}, {
+						title => cstring(undef, 'PLUGIN_PLUZZ_PLAY_FROM_POSITION_X', $position),
+						type   => 'audio',
+						url    => $item->{'url'} . "&lastpos=$lastpos",
+					} ],
+				};
+		} else {	
+			unshift  @menu, {
+				name => $item->{'name'},
+				play => $item->{'url'},
+				on_select => 'play',
+				image => $item->{'icon'},
+				type => 'playlist',
+			};
+		}	
 	}
 
 	$callback->({ items => \@menu });
@@ -202,14 +224,35 @@ sub searchHandler {
 				
 		for my $entry (@$result) {
 			my ($date) =  ($entry->{date_diffusion} =~ m/(\S*)T/);
-						
-			push @$items, {
-				name 		=> $entry->{soustitre} || "$entry->{titre} ($date)",
-				type 		=> 'playlist',
-				on_select 	=> 'play',
-				play 		=> "pluzz://$entry->{id_diffusion}&channel=$params->{channel}&program=$params->{code_programme}",
-				image 		=> IMAGE_URL . "$entry->{image_medium}",
-			};
+			
+			if (my $lastpos = $cache->get("pz:lastpos-" . $entry->{id_diffusion})) {
+				my $position = Slim::Utils::DateTime::timeFormat($lastpos);
+				$position =~ s/^0+[:\.]//;
+				
+				push @$items, {
+					name 		=> $entry->{soustitre} || "$entry->{titre} ($date)",
+					type 		=> 'link',
+					image 		=> IMAGE_URL . "$entry->{image_medium}",
+					items => [ {
+						title => cstring(undef, 'PLUGIN_PLUZZ_PLAY_FROM_BEGINNING'),
+						type   => 'audio',
+						url    => "pluzz://$entry->{id_diffusion}&channel=$params->{channel}&program=$params->{code_programme}",
+					}, {
+						title => cstring(undef, 'PLUGIN_PLUZZ_PLAY_FROM_POSITION_X', $position),
+						type   => 'audio',
+						url    => "pluzz://$entry->{id_diffusion}&channel=$params->{channel}&program=$params->{code_programme}&lastpos=$lastpos",
+					} ],
+				};
+				
+			} else {
+				push @$items, {
+					name 		=> $entry->{soustitre} || "$entry->{titre} ($date)",
+					type 		=> 'playlist',
+					on_select 	=> 'play',
+					play 		=> "pluzz://$entry->{id_diffusion}&channel=$params->{channel}&program=$params->{code_programme}",
+					image 		=> IMAGE_URL . "$entry->{image_medium}",
+				};
+			}	
 			
 		}
 		
