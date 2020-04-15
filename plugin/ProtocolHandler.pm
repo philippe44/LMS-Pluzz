@@ -60,9 +60,6 @@ sub new {
 
 sub onStop {
     my ($class, $song) = @_;
-
-	# return if $song->pluginData('liveStream');
-	
 	my $elapsed = $song->master->controller->playingSongElapsed;
 	my ($id) = $class->getId($song->track->url);
 	
@@ -168,7 +165,7 @@ sub getNextTrack {
 	$song->pluginData(lastpos => ($url =~ /&lastpos=([\d]+)/)[0] || 0);
 	$url =~ s/&lastpos=[\d]*//;				
 	
-	my ($id)	 = $class->getId($url);
+	my ($id) = $class->getId($url);
 
 	$log->info("getNextTrack : $url (id: $id)");
 	
