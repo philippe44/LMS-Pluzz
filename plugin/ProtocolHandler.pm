@@ -1,4 +1,4 @@
-package Plugins::Pluzz::ProtocolHandler;
+package Plugins::FranceTV::ProtocolHandler;
 use base qw(IO::Handle);
 
 use strict;
@@ -12,16 +12,13 @@ use Slim::Utils::Prefs;
 use Slim::Utils::Errno;
 use Slim::Utils::Cache;
 
-use Plugins::Pluzz::MPEGTS;
+use Plugins::FranceTV::MPEGTS;
 
-my $log   = logger('plugin.pluzz');
-my $prefs = preferences('plugin.pluzz');
+my $log   = logger('plugin.francetv');
+my $prefs = preferences('plugin.francetv');
 my $cache = Slim::Utils::Cache->new;
 
-use constant API_URL => 'http://pluzz.webservices.francetelevisions.fr';
-use constant API_URL_GLOBAL => 'http://webservices.francetelevisions.fr';
-
-Slim::Player::ProtocolHandlers->registerHandler('pluzz', __PACKAGE__);
+Slim::Player::ProtocolHandlers->registerHandler('francetv', __PACKAGE__);
 
 sub new {
 	my $class = shift;
@@ -31,7 +28,7 @@ sub new {
 	my $seekdata   = $song->can('seekdata') ? $song->seekdata : $song->{'seekdata'};
 	
 	# erase last position from cache
-	$cache->remove("pz:lastpos-" . ($class->getId($args->{'url'}))[0]);
+	$cache->remove("ft:lastpos-" . ($class->getId($args->{'url'}))[0]);
 	
 	if ( my $newtime = ($seekdata->{'timeOffset'} || $song->pluginData('lastpos')) ) {
 		my $streams = \@{$args->{song}->pluginData('streams')};
@@ -48,7 +45,7 @@ sub new {
 		${*$self}{'song'}    = $args->{'song'};
 		${*$self}{'vars'} = {         # variables which hold state for this instance: (created by "open")
 			'inBuf'       => undef,   #  reference to buffer of received packets
-			'state'       => Plugins::Pluzz::MPEGTS::SYNCHRO, #  mpeg2ts decoder state
+			'state'       => Plugins::FranceTV::MPEGTS::SYNCHRO, #  mpeg2ts decoder state
 			'index'  	  => $index,  #  current index in fragments
 			'fetching'    => 0,		  #  flag for waiting chunk data
 			'pos'		  => 0,		  #  position in the latest input buffer
@@ -63,11 +60,11 @@ sub onStop {
 	my $elapsed = $song->master->controller->playingSongElapsed;
 	my ($id) = $class->getId($song->track->url);
 	
-	if ($elapsed < $song->duration - 15) {
-		$cache->set("pz:lastpos-$id", int ($elapsed), '30days');
+	if ($elapsed > 15 && $elapsed < $song->duration - 15) {
+		$cache->set("ft:lastpos-$id", int ($elapsed), '30days');
 		$log->info("Last position for $id is $elapsed");
 	} else {
-		$cache->remove("pz:lastpos-$id");
+		$cache->remove("ft:lastpos-$id");
 	}	
 }
 
@@ -97,7 +94,6 @@ sub getSeekData {
 sub vars {
 	return ${*{$_[0]}}{'vars'};
 }
-
 
 sub sysread {
 	use bytes;
@@ -140,7 +136,7 @@ sub sysread {
 				$v->{'fetching'} = 0;
 			}, 
 			
-			Plugins::Pluzz::API::getSocks,
+			Plugins::FranceTV::API::getSocks,
 			
 		)->get($url);
 			
@@ -148,7 +144,7 @@ sub sysread {
 		return undef;
 	}	
 				
-	my $len = Plugins::Pluzz::MPEGTS::processTS($v, \$_[1], $maxBytes);
+	my $len = Plugins::FranceTV::MPEGTS::processTS($v, \$_[1], $maxBytes);
 			
 	return $len if $len;
 	
@@ -205,7 +201,6 @@ sub getNextTrack {
 	);
 }	
 
-
 sub getSampleRate {
 	use bytes;
 	
@@ -220,8 +215,8 @@ sub getSampleRate {
 			my $adts;
 			my $v = { 'inBuf' => \$data,
 					  'pos'   => 0, 
-					  'state' => Plugins::Pluzz::MPEGTS::SYNCHRO } ;
-			my $len = Plugins::Pluzz::MPEGTS::processTS($v, \$adts, 256); # must be more than 188
+					  'state' => Plugins::FranceTV::MPEGTS::SYNCHRO } ;
+			my $len = Plugins::FranceTV::MPEGTS::processTS($v, \$adts, 256); # must be more than 188
 			
 			return $cb->( undef ) if !$len || (unpack('n', substr($adts, 0, 2)) & 0xFFF0 != 0xFFF0);
 						
@@ -239,16 +234,15 @@ sub getSampleRate {
 			$cb->( undef );
 		},
 		
-		Plugins::Pluzz::API::getSocks,
+		Plugins::FranceTV::API::getSocks,
 
 	)->get( $url, 'Range' => 'bytes=0-16384' );
 
 }
 
-
 sub getFragments {
 	my ($cb, $id, $song) = @_;
-	my $url = API_URL_GLOBAL . "/tools/getInfosOeuvre/v2/?catalogue=Pluzz&idDiffusion=$id";
+	my $url	= "http://webservices.francetelevisions.fr/tools/getInfosOeuvre/v2/?idDiffusion=$id";
 		
 	$log->info("getting master url for : $url, $id");
 	
@@ -268,11 +262,10 @@ sub getFragments {
 			$cb->(undef);
 		},
 		
-		Plugins::Pluzz::API::getSocks,
+		Plugins::FranceTV::API::getSocks,
 
 	)->get($url);
 }
-
 
 sub getFragmentsUrl {
 	my ($cb, $url) = @_;
@@ -301,7 +294,7 @@ sub getFragmentsUrl {
 			$cb->(undef);
 		},
 		
-		Plugins::Pluzz::API::getSocks,
+		Plugins::FranceTV::API::getSocks,
 		
 	)->get($url);
 }	
@@ -331,7 +324,7 @@ sub getFragmentList {
 			$cb->(undef);
 		},
 		
-		Plugins::Pluzz::API::getSocks,
+		Plugins::FranceTV::API::getSocks,
 					
 	)->get($url);
 }	
@@ -339,7 +332,6 @@ sub getFragmentList {
 
 sub getMetadataFor {
 	my ($class, $client, $url) = @_;
-	my $icon = $class->getIcon();
 		
 	main::DEBUGLOG && $log->debug("getmetadata: $url");
 
@@ -347,11 +339,11 @@ sub getMetadataFor {
 	my ($id, $channel, $program) = $class->getId($url);
 	return unless $id && $channel && $program;
 	
-	if ( my $meta = $cache->get("pz:meta-$id") ) {
+	if ( my $meta = $cache->get("ft:meta-$id") ) {
 						
-		Plugins::Pluzz::Plugin->updateRecentlyPlayed({
+		Plugins::FranceTV::Plugin->updateRecentlyPlayed({
 			url   => $url, 
-			name  => $meta->{_fulltitle} || $meta->{title}, 
+			name  => $meta->{title}, 
 			icon  => $meta->{icon},
 		});
 		
@@ -360,19 +352,18 @@ sub getMetadataFor {
 		return $meta;
 	}	
 		
-	Plugins::Pluzz::API->searchEpisode( sub {
-		my $result = shift;
-		my $item = 	first { $_->{id_diffusion} eq $id } @{$result || []};
-						
+	# that sets cache for whole program
+	Plugins::FranceTV::API->searchEpisode( sub {
 		if ($client) {
 			$client->currentPlaylistUpdateTime( Time::HiRes::time() );
 			Slim::Control::Request::notifyFromArray( $client, [ 'newmetadata' ] );
 		}
-		
-	}, { channel => $channel, code_programme => $program } );
+	}, { channel => $channel, program => $program } );
 			
-	return { type	=> 'Pluzz',
-			 title	=> "Pluzz",
+	my $icon = $class->getIcon();
+	
+	return { type	=> 'FranceTV',
+			 title	=> "FranceTV",
 			 icon	=> $icon,
 			 cover	=> $icon,
 			};
@@ -382,14 +373,14 @@ sub getMetadataFor {
 sub getIcon {
 	my ( $class, $url ) = @_;
 
-	return Plugins::Pluzz::Plugin->_pluginDataFor('icon');
+	return Plugins::FranceTV::Plugin->_pluginDataFor('icon');
 }
 
 
 sub getId {
 	my ($class, $url) = @_;
 
-	if ($url =~ m|pluzz://([^&]+)&channel=([^&]+)&program=([^&]+)|) {
+	if ($url =~ m|francetv://([^&]+)&channel=([^&]+)&program=([^&]+)|) {
 		return ($1, $2, $3);
 	}
 		

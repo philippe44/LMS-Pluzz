@@ -1,6 +1,6 @@
-package Plugins::Pluzz::Plugin;
+package Plugins::FranceTV::Plugin;
 
-# Plugin to stream audio from Pluzz videos streams
+# Plugin to stream audio from FranceTV videos streams
 #
 # Released under GPLv2
 
@@ -9,29 +9,30 @@ use base qw(Slim::Plugin::OPMLBased);
 
 use File::Spec::Functions;
 use Encode qw(encode decode);
+use HTML::Entities;
 
 use Slim::Utils::Strings qw(string cstring);
 use Slim::Utils::Prefs;
 use Slim::Utils::Log;
 
-use Plugins::Pluzz::API;
-use Plugins::Pluzz::ProtocolHandler;
-use Plugins::Pluzz::ListProtocolHandler;
+use Plugins::FranceTV::API;
+use Plugins::FranceTV::ProtocolHandler;
+use Plugins::FranceTV::ListProtocolHandler;
 
 # see if HTTP(S)Socks is available
 eval "require Slim::Networking::Async::Socket::HTTPSocks" or die "Please update your LMS version to recent build";
 
 my $WEBLINK_SUPPORTED_UA_RE = qr/iPeng|SqueezePad|OrangeSqueeze/i;
 
-use constant IMAGE_URL => 'http://refonte.webservices.francetelevisions.fr';
+use constant IMAGE_URL => 'http://api-front.yatta.francetv.fr';
 
 my	$log = Slim::Utils::Log->addLogCategory({
-	'category'     => 'plugin.pluzz',
+	'category'     => 'plugin.francetv',
 	'defaultLevel' => 'WARN',
-	'description'  => 'PLUGIN_PLUZZ',
+	'description'  => 'PLUGIN_FRANCETV',
 });
 
-my $prefs = preferences('plugin.pluzz');
+my $prefs = preferences('plugin.francetv');
 my $cache = Slim::Utils::Cache->new;
 
 $prefs->init({ 
@@ -47,28 +48,28 @@ sub initPlugin {
 
 	$class->SUPER::initPlugin(
 		feed   => \&toplevel,
-		tag    => 'pluzz',
+		tag    => 'francetv',
 		menu   => 'radios',
 		is_app => 1,
 		weight => 10,
 	);
 
 =comment	
-	Slim::Menu::TrackInfo->registerInfoProvider( pluzz => (
+	Slim::Menu::TrackInfo->registerInfoProvider( francetv => (
 		after => 'bottom',
 		func  => \&webVideoLink,
 	) );
 
-	Slim::Menu::GlobalSearch->registerInfoProvider( pluzz => (
+	Slim::Menu::GlobalSearch->registerInfoProvider( francetv => (
 		after => 'middle',
-		name  => 'PLUGIN_PLUZZ',
+		name  => 'PLUGIN_FRANCETV',
 		func  => \&searchInfoMenu,
 	) );
 =cut	
 
 	if ( main::WEBUI ) {
-		require Plugins::Pluzz::Settings;
-		Plugins::Pluzz::Settings->new;
+		require Plugins::FranceTV::Settings;
+		Plugins::FranceTV::Settings->new;
 	}
 	
 	for my $recent (reverse @{$prefs->get('recent')}) {
@@ -79,7 +80,7 @@ sub initPlugin {
 #        |  |is a Query
 #        |  |  |has Tags
 #        |  |  |  |Function to call
-	Slim::Control::Request::addDispatch(['pluzz', 'info'], 
+	Slim::Control::Request::addDispatch(['francetv', 'info'], 
 		[1, 1, 1, \&cliInfoQuery]);
 		
 	
@@ -91,7 +92,7 @@ sub shutdownPlugin {
 	$class->saveRecentlyPlayed('now');
 }
 
-sub getDisplayName { 'PLUGIN_PLUZZ' }
+sub getDisplayName { 'PLUGIN_FRANCETV' }
 
 sub updateRecentlyPlayed {
 	my ($class, $info) = @_;
@@ -122,38 +123,28 @@ sub saveRecentlyPlayed {
 
 sub toplevel {
 	my ($client, $callback, $args) = @_;
-			
-	$callback->([
-		{ name => 'France 2', type => 'url', image => '/plugins/Pluzz/html/images/france2.png', url => \&channelsHandler, passthrough => [ { channel => 'france2' } ] },
-		
-		{ name => 'France 3', type => 'url', image => '/plugins/Pluzz/html/images/france3.png', url => \&channelsHandler, passthrough => [ { channel => 'france3' } ] },
-		
-		{ name => 'France 4', type => 'url', image => '/plugins/Pluzz/html/images/france4.png', url => \&channelsHandler, passthrough => [ { channel => 'france4' } ] },
-		
-		{ name => 'France 5', type => 'url', image => '/plugins/Pluzz/html/images/france5.png', url => \&channelsHandler, passthrough => [ { channel => 'france5' } ] },
-		
-		{ name => 'France O', type => 'url', image => '/plugins/Pluzz/html/images/franceO.png', url => \&channelsHandler, passthrough => [ { channel => 'franceo' } ] },
-		
-		{ name => cstring($client, 'PLUGIN_PLUZZ_RECENTLYPLAYED'), image => getIcon(), url  => \&recentHandler, },
-	]);
+  
+    addChannels($client, sub {
+			my $items = shift;
+            unshift @$items, { name => cstring($client, 'PLUGIN_FRANCETV_RECENTLYPLAYED'), image => getIcon(), url  => \&recentHandler };
+			$callback->( $items );
+		}, $args
+	);
 }
 
 sub getIcon {
 	my ( $class, $url ) = @_;
-
-	return Plugins::Pluzz::Plugin->_pluginDataFor('icon');
+	return Plugins::FranceTV::Plugin->_pluginDataFor('icon');
 }
-
 
 sub recentHandler {
 	my ($client, $callback, $args) = @_;
-
 	my @menu;
 
 	for my $item(reverse values %recentlyPlayed) {
-		my ($id) = Plugins::Pluzz::ProtocolHandler->getId($item->{'url'});
+		my ($id) = Plugins::FranceTV::ProtocolHandler->getId($item->{'url'});
 		
-		if (my $lastpos = $cache->get("pz:lastpos-$id")) {
+		if (my $lastpos = $cache->get("ft:lastpos-$id")) {
 			my $position = Slim::Utils::DateTime::timeFormat($lastpos);
 			$position =~ s/^0+[:\.]//;
 				
@@ -162,11 +153,11 @@ sub recentHandler {
 				image => $item->{'icon'},
 				type => 'link',
 				items => [ {
-						title => cstring(undef, 'PLUGIN_PLUZZ_PLAY_FROM_BEGINNING'),
+						title => cstring(undef, 'PLUGIN_FRANCETV_PLAY_FROM_BEGINNING'),
 						type   => 'audio',
 						url    => $item->{'url'},
 					}, {
-						title => cstring(undef, 'PLUGIN_PLUZZ_PLAY_FROM_POSITION_X', $position),
+						title => cstring(undef, 'PLUGIN_FRANCETV_PLAY_FROM_POSITION_X', $position),
 						type   => 'audio',
 						url    => $item->{'url'} . "&lastpos=$lastpos",
 					} ],
@@ -185,72 +176,96 @@ sub recentHandler {
 	$callback->({ items => \@menu });
 }
 
+sub addChannels {
+	my ($client, $cb, $args) = @_;
+	my $page = '/publish/channels';  
+	
+	Plugins::FranceTV::API::search( $page, sub {
+		my $items = [];
+		my $data = shift;
+		
+		for my $entry (@{$data->{result}}) {
+			push @$items, {
+				name  => $entry->{label},
+				type  => 'link',
+				url   => \&channelsHandler,
+				image => getImage($entry->{media_image}->{patterns}, 'carre') || getIcon(),
+				passthrough 	=> [ { channel => $entry->{url} } ],
+			};
+		}
+		
+		@$items = sort {lc($a->{name}) cmp lc($b->{name})} @$items;
+		$cb->( $items );
+	
+	}, { _ttl => '30days' } );	
+}	
 
 sub channelsHandler {
 	my ($client, $cb, $args, $params) = @_;
 	
-	Plugins::Pluzz::API->searchProgram( sub {
+	Plugins::FranceTV::API::searchProgram( sub {
 		my $result = shift;
 		my $items = [];
 		
 		for my $entry (@$result) {
-							
 			push @$items, {
-				name  => $entry->{titre_programme},
+				name  => $entry->{label} || $entry->{title},
 				type  => 'playlist',
-				url   => \&searchHandler,
-				image => IMAGE_URL . "$entry->{image_medium}",
-				passthrough 	=> [ { %${params}, code_programme => $entry->{code_programme} } ],
-				favorites_url  	=> "pzplaylist://channel=$params->{channel}&program=$entry->{code_programme}",
+				url   => \&programHandler,
+				image => getImage($entry->{media_image}->{patterns}, 'carre', 1) || getIcon(),
+				passthrough 	=> [ { %${params}, program => $entry->{url} } ],
+				favorites_url  	=> "ftplaylist://channel=$params->{channel}&program=$entry->{url}",
 				favorites_type 	=> 'audio',
 			};
-			
 		}
 		
 		@$items = sort {lc($a->{name}) cmp lc($b->{name})} @$items;
-		
 		$cb->( $items );
 		
 	}, $params );
 }
 
-
-sub searchHandler {
+sub programHandler {
 	my ($client, $cb, $args, $params) = @_;
 	
-	Plugins::Pluzz::API->searchEpisode( sub {
+	Plugins::FranceTV::API->searchEpisode( sub {
 		my $result = shift;
 		my $items = [];
 				
 		for my $entry (@$result) {
-			my ($date) =  ($entry->{date_diffusion} =~ m/(\S*)T/);
+			my ($video) = grep { $_->{type} eq 'main' } @{$entry->{content_has_medias}};
+			my $meta = $cache->get("ft:meta-" . $video->{media}->{si_id});
 			
-			if (my $lastpos = $cache->get("pz:lastpos-" . $entry->{id_diffusion})) {
+			if (my $lastpos = $cache->get("ft:lastpos-" . $video->{media}->{si_id}) && !$params->{playlist}) {
 				my $position = Slim::Utils::DateTime::timeFormat($lastpos);
 				$position =~ s/^0+[:\.]//;
 				
 				push @$items, {
-					name 		=> $entry->{soustitre} || "$entry->{titre} ($date)",
+					name 		=> $meta->{title},
 					type 		=> 'link',
-					image 		=> IMAGE_URL . "$entry->{image_medium}",
+					image 		=> $meta->{cover},
 					items => [ {
-						title => cstring(undef, 'PLUGIN_PLUZZ_PLAY_FROM_BEGINNING'),
+						title => cstring(undef, 'PLUGIN_FRANCETV_PLAY_FROM_BEGINNING'),
 						type   => 'audio',
-						url    => "pluzz://$entry->{id_diffusion}&channel=$params->{channel}&program=$params->{code_programme}",
+						url    => "francetv://$video->{media}->{si_id}&channel=$params->{channel}&program=$params->{program}",
 					}, {
-						title => cstring(undef, 'PLUGIN_PLUZZ_PLAY_FROM_POSITION_X', $position),
+						title => cstring(undef, 'PLUGIN_FRANCETV_PLAY_FROM_POSITION_X', $position),
 						type   => 'audio',
-						url    => "pluzz://$entry->{id_diffusion}&channel=$params->{channel}&program=$params->{code_programme}&lastpos=$lastpos",
+						url    => "francetv://$video->{media}->{si_id}&channel=$params->{channel}&program=$params->{program}&lastpos=$lastpos",
 					} ],
 				};
 				
 			} else {
+				# $entry->{description} =~ s|<p>(.+?)</p>|$1\n|g;
 				push @$items, {
-					name 		=> $entry->{soustitre} || "$entry->{titre} ($date)",
+					name 		=> $meta->{title},
+					description	=> decode_entities($entry->{description} =~ s|<.+?>||gr),
+					pubdate		=> $entry->{first_publication_date},
+					duration	=> $meta->{duration},
 					type 		=> 'playlist',
 					on_select 	=> 'play',
-					play 		=> "pluzz://$entry->{id_diffusion}&channel=$params->{channel}&program=$params->{code_programme}",
-					image 		=> IMAGE_URL . "$entry->{image_medium}",
+					play 		=> "francetv://$video->{media}->{si_id}&channel=$params->{channel}&program=$params->{program}",
+					image 		=> $meta->{cover},
 				};
 			}	
 			
@@ -261,6 +276,16 @@ sub searchHandler {
 	}, $params );
 }
 
+sub getImage {
+	my ($images, $type, $index) = @_;
+	my ($image) = grep { $_->{type} eq $type} @{$images};
+	return undef unless $image;
+	
+	my @sorted = sort {lc $a cmp lc $b} keys %{$image->{urls}};
+	$index = int ($#sorted * ($index || 0) / $#sorted);
+
+	return IMAGE_URL . $image->{urls}->{$sorted[$index]};
+}
 
 =comment
 sub webVideoLink {
@@ -274,7 +299,7 @@ sub webVideoLink {
 		if ( ($client->controllerUA && $client->controllerUA =~ $WEBLINK_SUPPORTED_UA_RE) || not defined $client->controllerUA ) {
 			return {
 				type    => 'text',
-				name    => cstring($client, 'PLUGIN_PLUZZ_WEBLINK'),
+				name    => cstring($client, 'PLUGIN_FRANCETV_WEBLINK'),
 				weblink => sprintf(VIDEO_BASE_URL, $id),
 				jive => {
 					actions => {
@@ -289,30 +314,6 @@ sub webVideoLink {
 			};
 		}
 	}
-}
-
-sub searchInfoMenu {
-	my ($client, $tags) = @_;
-
-	my $query = $tags->{'search'};
-
-	return {
-		name => cstring($client, 'PLUGIN_PLUZZ'),
-		items => [
-			{
-				name => cstring($client, 'PLUGIN_YOUTUBE_SEARCH'),
-				type => 'link',
-				url  => \&searchHandler, 
-				passthrough => [ { q => $query }]
-			},
-			{
-				name => cstring($client, 'PLUGIN_YOUTUBE_MUSICSEARCH'),
-				type => 'link',
-				url  => \&searchHandler, 
-				passthrough => [ { videoCategoryId => 10, q => $query }]
-			},
-		   ],
-	};
 }
 
 # special query to allow weblink to be sent to iPeng

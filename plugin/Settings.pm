@@ -1,25 +1,25 @@
-package Plugins::Pluzz::Settings;
+package Plugins::FranceTV::Settings;
 use base qw(Slim::Web::Settings);
 
 use strict;
 
 use Slim::Utils::Prefs;
 use Slim::Utils::Log;
-use Plugins::Pluzz::API;
+use Plugins::FranceTV::API;
 
-my $prefs = preferences('plugin.pluzz');
-my $log = logger('plugin.pluzz');
+my $prefs = preferences('plugin.francetv');
+my $log = logger('plugin.francetv');
 
 sub name {
-	return 'PLUGIN_PLUZZ';
+	return 'PLUGIN_FRANCETV';
 }
 
 sub page {
-	return 'plugins/Pluzz/settings/basic.html';
+	return 'plugins/FranceTV/settings/basic.html';
 }
 
 sub prefs {
-	return (preferences('plugin.pluzz'), qw(socks socksProxy socksUsername socksPassword no_cache));
+	return (preferences('plugin.francetv'), qw(socks socksProxy socksUsername socksPassword no_cache));
 }
 
 sub handler {

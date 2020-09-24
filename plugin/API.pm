@@ -1,4 +1,4 @@
-package Plugins::Pluzz::API;
+package Plugins::FranceTV::API;
 
 use strict;
 
@@ -8,8 +8,8 @@ use List::Util qw(min max);
 use MIME::Base64;
 use Exporter qw(import);
 
-use constant API_URL => 'http://pluzz.webservices.francetelevisions.fr';
-use constant IMAGE_URL => 'http://refonte.webservices.francetelevisions.fr';
+use constant API_FRONT_URL => 'http://api-front.yatta.francetv.fr/standard';
+use constant IMAGE_URL => 'http://api-front.yatta.francetv.fr';
 
 use Slim::Utils::Cache;
 use Slim::Utils::Log;
@@ -17,8 +17,8 @@ use Slim::Utils::Prefs;
 
 our @EXPORT = qw(obfuscate deobfuscate);
 	
-my $prefs = preferences('plugin.pluzz');
-my $log   = logger('plugin.pluzz');
+my $prefs = preferences('plugin.francetv');
+my $log   = logger('plugin.francetv');
 my $cache = Slim::Utils::Cache->new();
 
 sub getSocks {
@@ -35,62 +35,58 @@ sub getSocks {
 }
 
 sub searchProgram {
-	my ( $class, $cb, $params ) = @_;
+	my ( $cb, $params ) = @_;
+	my $page = "/publish/channels/$params->{channel}/programs";
 	
 	$log->debug("get program $params->{channel}");
+	$params->{_ttl} ||= 3600;
 	
-	search( sub {
-	
-		my $result = shift;
-		my @input = grep { $_->{chaine_id} eq $params->{channel} } @{$result->{reponse}->{emissions} || []};
-		my @list;
-				
-		#keep only 1st instance of all shows for the requested channel
-		foreach my $item (@input) {
-			push(@list, $item) if !grep {$_->{code_programme} eq $item->{code_programme} } @list;
-		}
-		
-		$cb->( \@list );
-		
-	}, $params );	
-
+	search( $page, sub {
+			# keep only shows from the channel and with at least one video
+			my @list = grep { $_->{video_count} && $_->{channel} eq $params->{channel} } @{shift->{result} || []};
+			$cb->( \@list );
+		}, $params 
+	);	
 }
 
 sub searchEpisode {
 	my ( $class, $cb, $params ) = @_;
+	my $page = "/publish/channels/$params->{channel}" . '_' . "$params->{program}/contents/?size=100&page=0&sort=begin_date:desc&filter=with-no-vod,only-visible,only-replay";    
 	
-	$log->debug("get episode $params->{code_programme} ($params->{channel})");
+	$log->debug("get episode $params->{program} ($params->{channel})");
 	
-	search( sub {
-		my $result = shift;
-						
-		#keep all shows for the requested channel
-		my @list = grep { $_->{code_programme} eq $params->{code_programme} } @{$result->{reponse}->{emissions} || []};
+	search( $page, sub {
+		my ($results, $cached) = @_;
+		my @list = grep { $_->{type} eq 'integrale' && $_->{content_has_medias} && $_->{class} eq 'video' } @{$results->{result} || []};		
 		
+		# don't re-cache metadata if already in cache ...
+		$cb->( \@list ) if $cached;
+
 		for my $entry (@list) {
-			my ($date) =  ($entry->{date_diffusion} =~ m/(\S*)T/);
-			
-			$cache->set("pz:meta-" . $entry->{id_diffusion}, 
-				{ title  => $entry->{soustitre} || "$entry->{titre} ($date)",
-				  icon     => IMAGE_URL . "$entry->{image_medium}",
-				  cover    => IMAGE_URL . "$entry->{image_medium}",
-				  duration => $entry->{duree_reelle},
-				  artist   => $entry->{presentateurs},
-				  album    => $entry->{titre_programme},
-				  type	   => 'Pluzz',
-				}, 900) if ( !$cache->get("pz:meta-" . $entry->{id_diffusion}) );
+			my ($video) = grep { $_->{type} eq 'main' } @{$entry->{content_has_medias}};
+			my ($image) = grep { $_->{type} eq 'image' } @{$entry->{content_has_medias}};			
+			$image = Plugins::FranceTV::Plugin::getImage($image->{media}->{patterns}, 'carre') || getIcon();
+
+			$cache->set("ft:meta-" . $video->{media}->{si_id}, 
+				{ title  => $entry->{title} || "$video->{media}->{title}, " . substr($entry->{first_publication_date}, 0, 10),
+				  icon     => $image,
+				  cover    => $image,
+				  duration => $video->{media}->{duration},
+				  artist   => $entry->{presenter},
+				  album    => $video->{media}->{title},
+				  type	   => 'FranceTV',
+				}, 3600*24) if ( !$cache->get("ft:meta-" . $video->{media}->{si_id}) );
 		}
-		
+
 		$cb->( \@list );
 	
 	}, $params ); 
 	
 }	
 
-
 sub search	{
-	my ( $cb, $params ) = @_;
-	my $url = API_URL . "/pluzz/liste/type/replay/chaine/$params->{channel}/nb/500?";
+	my ( $page, $cb, $params ) = @_;
+	my $url = API_FRONT_URL . $page;
 	my $cacheKey = md5_hex($url);
 	my $cached;
 	
@@ -98,20 +94,15 @@ sub search	{
 	
 	if ( !$prefs->get('no_cache') && ($cached = $cache->get($cacheKey)))  {
 		main::INFOLOG && $log->info("Returning cached data for: $url");
-		$cb->($cached);
+		$cb->($cached, 1);
 		return;
 	}
 	
 	Slim::Networking::SimpleAsyncHTTP->new(
 	
 		sub {
-			my $response = shift;
-			my $result = eval { decode_json($response->content) };
-			
-			$result ||= {};
-			
-			$cache->set($cacheKey, $result, 900);
-			
+			my $result = eval { decode_json(shift->content) } || {};
+			$cache->set($cacheKey, $result, $params->{_ttl} || 900);
 			$cb->($result);
 		},
 

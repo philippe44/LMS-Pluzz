@@ -1,21 +1,20 @@
-package Plugins::Pluzz::ListProtocolHandler;
+package Plugins::FranceTV::ListProtocolHandler;
 
 use strict;
 
 use Slim::Utils::Log;
 
-use Plugins::Pluzz::API;
-use Plugins::Pluzz::Plugin;
-use Data::Dumper;
+use Plugins::FranceTV::API;
+use Plugins::FranceTV::Plugin;
 
-Slim::Player::ProtocolHandlers->registerHandler('pzplaylist', __PACKAGE__);
+Slim::Player::ProtocolHandlers->registerHandler('ftplaylist', __PACKAGE__);
 
-my $log = logger('plugin.pluzz');
+my $log = logger('plugin.francetv');
 
 sub overridePlayback {
 	my ( $class, $client, $url ) = @_;
 		
-	if ( $url !~ m|(?:pzplaylist)://channel=([^&]+)&program=(\S*)|i ) {
+	if ( $url !~ m|(?:ftplaylist)://channel=([^&]+)&program=(\S*)|i ) {
 		return undef;
 	}
 	
@@ -23,12 +22,10 @@ sub overridePlayback {
 	
 	$log->debug("playlist override $channel, $program");
 	
-	Plugins::Pluzz::Plugin->searchHandler( sub {
+	Plugins::FranceTV::Plugin->programHandler( sub {
 			my $result = shift;
-			
-			createPlaylist($client, $result); 
-			
-		}, undef, { channel => $channel, code_programme => $program } );
+			createPlaylist($client, $result); 	
+		}, undef, { channel => $channel, program => $program, playlist => 1 } );
 			
 	return 1;
 }
@@ -39,7 +36,8 @@ sub createPlaylist {
 		
 	for my $item (@{$items}) {
 		push @tracks, Slim::Schema->updateOrCreate( {
-				'url'        => $item->{play} });
+				'url' => $item->{play} 
+			});
 	}	
 	
 	$client->execute([ 'playlist', 'clear' ]);
@@ -52,7 +50,7 @@ sub canDirectStream {
 }
 
 sub contentType {
-	return 'pluzz';
+	return 'francetv';
 }
 
 sub isRemote { 1 }

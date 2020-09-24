@@ -1,27 +1,27 @@
 [% PROCESS settings/header.html %]
 
-	[% WRAPPER setting title="PLUGIN_PLUZZ_BANNER" %]
-		<div>[% "PLUGIN_PLUZZ_BANNER_TEXT" | string %]</div>
+	[% WRAPPER setting title="PLUGIN_FRANCETV_BANNER" %]
+		<div>[% "PLUGIN_FRANCETV_BANNER_TEXT" | string %]</div>
 	[% END %]
 
 	<div class="prefDesc">
-	[% WRAPPER setting title="PLUGIN_PLUZZ_CACHE" desc="PLUGIN_PLUZZ_CACHE_DESC" %]
+	[% WRAPPER setting title="PLUGIN_FRANCETV_CACHE" desc="PLUGIN_FRANCETV_CACHE_DESC" %]
 		<input name="pref_no_cache" type="checkbox" [% IF prefs.pref_no_cache %] checked [% END %]>
 	[% END %]
 	
-	[% WRAPPER setting title="PLUGIN_PLUZZ_SOCKS" desc="PLUGIN_PLUZZ_SOCKS_DESC" %]
+	[% WRAPPER setting title="PLUGIN_FRANCETV_SOCKS" desc="PLUGIN_FRANCETV_SOCKS_DESC" %]
 		<input name="pref_socks" type="checkbox" [% IF prefs.pref_socks %] checked [% END %]>
 	[% END %]		
 		
-	[% WRAPPER setting title="PLUGIN_PLUZZ_SOCKSPROXY" desc="" %]
+	[% WRAPPER setting title="PLUGIN_FRANCETV_SOCKSPROXY" desc="" %]
 		<input type=text class="stdedit" name="pref_socksProxy" id="socksProxy" value="[% prefs.pref_socksProxy %]" size="40">
 	[% END %]
 	
-	[% WRAPPER setting title="PLUGIN_PLUZZ_SOCKSUSERNAME" desc="" %]
+	[% WRAPPER setting title="PLUGIN_FRANCETV_SOCKSUSERNAME" desc="" %]
 		<input type=text class="stdedit" name="pref_socksUsername" id="socksUsername" value="[% prefs.pref_socksUsername %]" size="40">
 	[% END %]
 		
-	[% WRAPPER setting title="PLUGIN_PLUZZ_SOCKSPASSWORD" desc="" %]
+	[% WRAPPER setting title="PLUGIN_FRANCETV_SOCKSPASSWORD" desc="" %]
 		<input type=password class="stdedit" name="pref_socksPassword" id="socksPassword" value="[% prefs.pref_socksPassword %]" size="40">
 	[% END %]
 	

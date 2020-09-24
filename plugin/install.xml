@@ -1,15 +1,15 @@
 <?xml version='1.0' standalone='yes'?>
 <extensions>
-  <icon>plugins/Pluzz/html/images/pluzz.png</icon>
+  <icon>plugins/FranceTV/html/images/francetv.jpg</icon>
   <targetApplication>
     <maxVersion>*</maxVersion>
     <id>SlimServer</id>
     <minVersion>7.7</minVersion>
   </targetApplication>
-  <optionsURL>plugins/Pluzz/settings/basic.html</optionsURL>
+  <optionsURL>plugins/FranceTV/settings/basic.html</optionsURL>
   <defaultState>enabled</defaultState>
-  <version>0.50.1</version>
-  <name>PLUGIN_PLUZZ</name>
-  <description>PLUGIN_PLUZZ_DESC</description>
-  <module>Plugins::Pluzz::Plugin</module>
+  <version>0.60.1</version>
+  <name>PLUGIN_FRANCETV</name>
+  <description>PLUGIN_FRANCETV_DESC</description>
+  <module>Plugins::FranceTV::Plugin</module>
 </extensions>
