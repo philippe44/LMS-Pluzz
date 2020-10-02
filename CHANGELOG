@@ -1,4 +1,7 @@
-﻿0.60.0
+﻿0.61.0
+ - allow direct link even when lastpos exists
+ 
+0.60.0
  - Pluzz becomes FranceTV
  
 0.50.1

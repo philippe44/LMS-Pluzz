@@ -25,7 +25,7 @@ sub overridePlayback {
 	Plugins::FranceTV::Plugin->programHandler( sub {
 			my $result = shift;
 			createPlaylist($client, $result); 	
-		}, undef, { channel => $channel, program => $program, playlist => 1 } );
+		}, undef, { channel => $channel, program => $program } );
 			
 	return 1;
 }

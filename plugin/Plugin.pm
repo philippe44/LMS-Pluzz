@@ -236,7 +236,7 @@ sub programHandler {
 			my ($video) = grep { $_->{type} eq 'main' } @{$entry->{content_has_medias}};
 			my $meta = $cache->get("ft:meta-" . $video->{media}->{si_id});
 			
-			if (my $lastpos = $cache->get("ft:lastpos-" . $video->{media}->{si_id}) && !$params->{playlist}) {
+			if ((my $lastpos = $cache->get("ft:lastpos-" . $video->{media}->{si_id})) && $args && length $args->{index}) {
 				my $position = Slim::Utils::DateTime::timeFormat($lastpos);
 				$position =~ s/^0+[:\.]//;
 				

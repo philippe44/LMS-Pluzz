@@ -8,7 +8,7 @@
   </targetApplication>
   <optionsURL>plugins/FranceTV/settings/basic.html</optionsURL>
   <defaultState>enabled</defaultState>
-  <version>0.60.1</version>
+  <version>0.61.0</version>
   <name>PLUGIN_FRANCETV</name>
   <description>PLUGIN_FRANCETV_DESC</description>
   <module>Plugins::FranceTV::Plugin</module>
