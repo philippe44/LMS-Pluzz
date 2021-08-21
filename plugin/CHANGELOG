@@ -1,4 +1,7 @@
-﻿0.61.0
+﻿0.61.1
+ - getIcon in API.pm was poiting nowhere
+  
+0.61.0
  - allow direct link even when lastpos exists
  
 0.60.0

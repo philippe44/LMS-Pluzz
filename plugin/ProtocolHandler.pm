@@ -369,13 +369,11 @@ sub getMetadataFor {
 			};
 }	
 
-
 sub getIcon {
 	my ( $class, $url ) = @_;
 
 	return Plugins::FranceTV::Plugin->_pluginDataFor('icon');
 }
-
 
 sub getId {
 	my ($class, $url) = @_;

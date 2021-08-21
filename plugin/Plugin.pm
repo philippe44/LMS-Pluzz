@@ -126,15 +126,10 @@ sub toplevel {
   
     addChannels($client, sub {
 			my $items = shift;
-            unshift @$items, { name => cstring($client, 'PLUGIN_FRANCETV_RECENTLYPLAYED'), image => getIcon(), url  => \&recentHandler };
+            unshift @$items, { name => cstring($client, 'PLUGIN_FRANCETV_RECENTLYPLAYED'), image => Plugins::FranceTV::ProtocolHandler->getIcon(), url  => \&recentHandler };
 			$callback->( $items );
 		}, $args
 	);
-}
-
-sub getIcon {
-	my ( $class, $url ) = @_;
-	return Plugins::FranceTV::Plugin->_pluginDataFor('icon');
 }
 
 sub recentHandler {
@@ -189,7 +184,7 @@ sub addChannels {
 				name  => $entry->{label},
 				type  => 'link',
 				url   => \&channelsHandler,
-				image => getImage($entry->{media_image}->{patterns}, 'carre') || getIcon(),
+				image => getImage($entry->{media_image}->{patterns}, 'carre') || Plugins::FranceTV::ProtocolHandler->getIcon(),
 				passthrough 	=> [ { channel => $entry->{url} } ],
 			};
 		}
@@ -212,7 +207,7 @@ sub channelsHandler {
 				name  => $entry->{label} || $entry->{title},
 				type  => 'playlist',
 				url   => \&programHandler,
-				image => getImage($entry->{media_image}->{patterns}, 'carre', 1) || getIcon(),
+				image => getImage($entry->{media_image}->{patterns}, 'carre', 1) || Plugins::FranceTV::ProtocolHandler->getIcon(),
 				passthrough 	=> [ { %${params}, program => $entry->{url} } ],
 				favorites_url  	=> "ftplaylist://channel=$params->{channel}&program=$entry->{url}",
 				favorites_type 	=> 'audio',

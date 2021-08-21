@@ -65,7 +65,7 @@ sub searchEpisode {
 		for my $entry (@list) {
 			my ($video) = grep { $_->{type} eq 'main' } @{$entry->{content_has_medias}};
 			my ($image) = grep { $_->{type} eq 'image' } @{$entry->{content_has_medias}};			
-			$image = Plugins::FranceTV::Plugin::getImage($image->{media}->{patterns}, 'carre') || getIcon();
+			$image = Plugins::FranceTV::Plugin::getImage($image->{media}->{patterns}, 'carre') || Plugins::FranceTV::ProtocolHandler->getIcon();
 
 			$cache->set("ft:meta-" . $video->{media}->{si_id}, 
 				{ title  => $entry->{title} || "$video->{media}->{title}, " . substr($entry->{first_publication_date}, 0, 10),
