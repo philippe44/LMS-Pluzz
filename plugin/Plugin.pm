@@ -210,7 +210,7 @@ sub channelsHandler {
 				image => getImage($entry->{media_image}->{patterns}, 'carre', 1) || Plugins::FranceTV::ProtocolHandler->getIcon(),
 				passthrough 	=> [ { %${params}, program => $entry->{url} } ],
 				favorites_url  	=> "ftplaylist://channel=$params->{channel}&program=$entry->{url}",
-				favorites_type 	=> 'audio',
+				favorites_type 	=> 'playlist',
 			};
 		}
 		

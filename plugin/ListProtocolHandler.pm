@@ -11,6 +11,27 @@ Slim::Player::ProtocolHandlers->registerHandler('ftplaylist', __PACKAGE__);
 
 my $log = logger('plugin.francetv');
 
+sub canDirectStream { 1 }
+sub contentType { 'francetv' }
+sub isRemote { 1 }
+
+sub explodePlaylist {
+	my ( $class, $client, $url, $cb ) = @_;
+	
+	my ($channel, $program) = $url =~ m|(?:ftplaylist)://channel=([^&]+)&program=(\S*)|i;
+	return undef unless $channel & $program;
+	
+	Plugins::FranceTV::Plugin->programHandler( sub {
+			my $items = shift;
+			$items = [ map { $_->{play} } @{$items} ] if $main::VERSION lt '8.2.0';
+			$cb->( { items => $items } );
+		}, 
+		{ index => 1 }, 
+		{ channel => $channel, program => $program },
+	);	
+}	
+
+=comment
 sub overridePlayback {
 	my ( $class, $client, $url ) = @_;
 		
@@ -44,16 +65,7 @@ sub createPlaylist {
 	$client->execute([ 'playlist', 'addtracks', 'listRef', \@tracks ]);
 	$client->execute([ 'play' ]);
 }
-
-sub canDirectStream {
-	return 1;
-}
-
-sub contentType {
-	return 'francetv';
-}
-
-sub isRemote { 1 }
+=cut
 
 
 1;

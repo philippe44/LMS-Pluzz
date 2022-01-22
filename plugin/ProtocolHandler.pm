@@ -5,14 +5,14 @@ use strict;
 
 use List::Util qw(first);
 use JSON::XS;
-use Data::Dumper;
+use XML::Simple;
 
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
 use Slim::Utils::Errno;
 use Slim::Utils::Cache;
 
-use Plugins::FranceTV::MPEGTS;
+use Plugins::FranceTV::m4a;
 
 my $log   = logger('plugin.francetv');
 my $prefs = preferences('plugin.francetv');
@@ -20,21 +20,42 @@ my $cache = Slim::Utils::Cache->new;
 
 Slim::Player::ProtocolHandlers->registerHandler('francetv', __PACKAGE__);
 
+=comment
+This new version handles MPD format that I really hate, it is such a mess. As many bad standards,
+it has probably been defined by folks who only care of the server side of things and have no idea 
+of the client implementation problems. So they have fun inventing an insane amount of permutations
+and combinations to do the same thing. Let's fo BaseURL at all levels, then SegmentTimelines, then
+SegmentTemplate, then Time or Number for repeats and so on... so much fun and in addition everyone
+wants "his way" implemented in the standard because of course my way is better than your way.
+At the end, you have a totally asymetrical specification with no capabilities negotiation/handshake
+so the server of course can decide to implement any of the gazillion of options to encode the source 
+and the client, whose software is the most difficult to update, has to implement all the options 
+THIS IS RIDICULOUS.
+=cut
+
 sub new {
 	my $class = shift;
 	my $args  = shift;
 	my $song  = $args->{'song'};
-	my $index = 0;
-	my $seekdata   = $song->can('seekdata') ? $song->seekdata : $song->{'seekdata'};
+	my ($index, $offset, $repeat) = (0, 0, 0);
+	my $seekdata = $song->can('seekdata') ? $song->seekdata : $song->{'seekdata'};
+	my $params = $song->pluginData('params');
 	
 	# erase last position from cache
 	$cache->remove("ft:lastpos-" . ($class->getId($args->{'url'}))[0]);
 	
 	if ( my $newtime = ($seekdata->{'timeOffset'} || $song->pluginData('lastpos')) ) {
-		my $streams = \@{$args->{song}->pluginData('streams')};
-		
-		$index = first { $streams->[$_]->{position} >= int $newtime } 0..scalar @$streams;
-		
+
+		TIME: foreach (@{$song->pluginData('segments')}) {
+			$offset = $_->{t} if $_->{t};
+			for my $c (0..$_->{r} || 0) {
+				$repeat = $c;
+				last TIME if $offset + $_->{d} > $newtime * $params->{timescale};
+				$offset += $_->{d};				
+			}	
+			$index++;			
+		}	
+				
 		$song->can('startOffset') ? $song->startOffset($newtime) : ($song->{startOffset} = $newtime);
 		$args->{'client'}->master->remoteStreamStartTime(Time::HiRes::time() - $newtime);
 	}
@@ -44,12 +65,19 @@ sub new {
 	if (defined($self)) {
 		${*$self}{'song'}    = $args->{'song'};
 		${*$self}{'vars'} = {         # variables which hold state for this instance: (created by "open")
-			'inBuf'       => undef,   #  reference to buffer of received packets
-			'state'       => Plugins::FranceTV::MPEGTS::SYNCHRO, #  mpeg2ts decoder state
-			'index'  	  => $index,  #  current index in fragments
-			'fetching'    => 0,		  #  flag for waiting chunk data
-			'pos'		  => 0,		  #  position in the latest input buffer
+			'inBuf'       => undef,   # reference to buffer of received packets
+			'index'  	  => $index,  # current index in segments
+			'offset'	  => $offset, # time offset, maybe be used to build URL
+			'repeat'	  => $repeat, # might start in a middle of a repeat
+			'fetching'    => 0,		  # flag for waiting chunk data
+			'context'	  => {},	  # context for mp4		
+			'retry'		  => 5,
+			'session' 	  => Slim::Networking::Async::HTTP->new( { socks => Plugins::FranceTV::API::getSocks } ),
+			'baseURL'     => $params->{baseURL}, 
 		};
+		
+		Plugins::FranceTV::m4a::setEsds(${*$self}{'vars'}->{context}, $params->{samplingRate}, $params->{channels});
+		$log->debug(Data::Dump::dump(${*$self}{'vars'}));
 	}
 
 	return $self;
@@ -69,7 +97,11 @@ sub onStop {
 }
 
 sub contentType { 'aac' }
-	
+sub isAudio { 1 }
+sub isRemote { 1 }
+sub songBytes { }
+sub canSeek { 1 }
+
 sub formatOverride {
 	my $class = shift;
 	my $song = shift;
@@ -77,86 +109,106 @@ sub formatOverride {
 	return $song->pluginData('format') || 'aac';
 }
 
-sub isAudio { 1 }
-
-sub isRemote { 1 }
-
-sub songBytes { }
-
-sub canSeek { 1 }
-
 sub getSeekData {
 	my ($class, $client, $song, $newtime) = @_;
 
 	return { timeOffset => $newtime };
 }
 
-sub vars {
-	return ${*{$_[0]}}{'vars'};
-}
-
 sub sysread {
 	use bytes;
 
 	my $self  = $_[0];
-	# return in $_[1]
-	my $maxBytes = $_[2];
-	my $v = $self->vars;
-		
+	my $v = ${*{$self}}{'vars'};
+
 	# waiting to get next chunk, nothing sor far	
 	if ( $v->{'fetching'} ) {
 		$! = EINTR;
 		return undef;
 	}
-			
-	# end of current segment, get next one
-	if ( !defined $v->{'inBuf'} || $v->{'pos'} == length ${$v->{'inBuf'}} ) {
 	
+	# end of current segment, get next one
+	if ( !defined $v->{'inBuf'} || length ${$v->{'inBuf'}} == 0 ) {
+	
+		my $song = ${*$self}{song};
+		my $segments = $song->pluginData('segments');
+		my $params = $song->pluginData('params');
+		my $total = scalar @{$segments}; 
+		
 		# end of stream
-		return 0 if $v->{index} == scalar @{${*$self}{song}->pluginData('streams')};
+		return 0 if $v->{index} == $total || !$v->{retry};
 		
+		$v->{fetching} = 1;
+	
 		# get next fragment/chunk
-		my $url = @{${*$self}{song}->pluginData('streams')}[$v->{index}]->{url};
-		$v->{index}++;
-		$v->{'pos'} = 0;
-		$v->{'fetching'} = 1;
-						
-		$log->info("fetching: $url");
+		my $item = @{$segments}[$v->{index}];
+		my $suffix = $item->{media} || $params->{media};
 		
-		Slim::Networking::SimpleAsyncHTTP->new(
-			sub {
-				$v->{'inBuf'} = $_[0]->contentRef;
-				$v->{'fetching'} = 0;
-				$log->debug("got chunk length: ", length ${$v->{'inBuf'}});
-			},
-			
-			sub { 
-				$log->warn("error fetching $url");
-				$v->{'inBuf'} = undef;
-				$v->{'fetching'} = 0;
-			}, 
-			
-			Plugins::FranceTV::API::getSocks,
-			
-		)->get($url);
-			
+		# don't think that 't' can be set at anytime, but just in case...
+		$v->{offset} = $item->{t} if $item->{t};
+		
+		# probably need some formatting for Number & Time
+		$suffix =~ s/\$RepresentationID\$/$params->{representation}->{id}/;
+		$suffix =~ s/\$Bandwidth\$/$params->{representation}->{bandwidth}/;
+		$suffix =~ s/\$Time\$/$v->{offset}/;
+		$suffix =~ s/\$Number\$/$v->{index}/;
+
+		my $url = $v->{'baseURL'} . "/$suffix";
+		
+		my $request = HTTP::Request->new( GET => $url );
+		$request->header( 'Connection', 'keep-alive' );
+		$request->protocol( 'HTTP/1.1' );
+		
+		$log->info("fetching index:$v->{'index'}/$total url:$url");		
+
+		$v->{'session'}->send_request( {
+				request => $request,
+				onRedirect => sub {
+					my $request = shift;
+					my $redirect = $request->uri;
+					my $match = (reverse ($suffix) ^ reverse ($redirect)) =~ /^(\x00*)/;
+					$v->{'baseURL'} = substr $redirect, 0, -$+[1] if $match;
+					$log->info("being redirected from $url to ", $request->uri, "using new base $v->{baseURL}");
+				},
+				onBody => sub {
+					$v->{fetching} = 0;
+					$v->{offset} += $item->{d};
+					$v->{repeat}++;	
+					$v->{retry} = 5;
+				
+					if ($v->{repeat} > ($item->{r} || 0)) {
+						$v->{index}++;
+						$v->{repeat} = 0;
+					}
+					
+					$v->{inBuf} = \shift->response->content;
+					$log->debug("got chunk length: ", length ${$v->{inBuf}});
+				},
+				onError => sub {
+					$v->{'session'}->disconnect;
+					$v->{'fetching'} = 0;					
+					$v->{'retry'} = $v->{index} < $total - 1 ? $v->{'retry'} - 1 : 0;
+					$v->{'baseURL'} = $params->{'baseURL'};
+					$log->error("cannot open session for $url ($_[1]) moving back to base URL");					
+				},
+		} );
+		
 		$! = EINTR;
 		return undef;
 	}	
-				
-	my $len = Plugins::FranceTV::MPEGTS::processTS($v, \$_[1], $maxBytes);
-			
+
+	my $len = Plugins::FranceTV::m4a::getAudio($v->{inBuf}, $v->{context}, $_[1], $_[2]);
 	return $len if $len;
 	
 	$! = EINTR;
 	return undef;
 }
 
-
 sub getNextTrack {
 	my ($class, $song, $successCb, $errorCb) = @_;
 	my $url 	 = $song->track()->url;
 	my $client   = $song->master();
+	my ($step1, $step2, $step3);
 	
 	$song->pluginData(lastpos => ($url =~ /&lastpos=([\d]+)/)[0] || 0);
 	$url =~ s/&lastpos=[\d]*//;				
@@ -169,166 +221,108 @@ sub getNextTrack {
 		$errorCb->();
 		return;
 	}	
-			
-	getFragments( 
 	
-		sub {
-			my $fragments = shift;
-			my $bitrate = shift;
-					
-			return $errorCb->() unless (defined $fragments && scalar @$fragments);
-			
-			my ($server) = Slim::Utils::Misc::crackURL( $fragments->[0]->{url} );
-						
-			$song->pluginData(streams => $fragments);	
-			$song->pluginData(stream  => $server);
-			$song->pluginData(format  => 'aac');
-			$song->track->bitrate( $bitrate );
-									
-			getSampleRate( $fragments->[0]->{url}, sub {
-				my $sampleRate = shift || 48000;
-							
-				$song->track->samplerate( $sampleRate );
-							
-				$client->currentPlaylistUpdateTime( Time::HiRes::time() );
-				Slim::Control::Request::notifyFromArray( $client, [ 'newmetadata' ] );
-																				
-				$successCb->();
-			} );
-						
-		} , $id, $song 
-		
-	);
-}	
+	# get the token's url (and starts auth if needed)
+	$step1 = sub {
+		my $data = shift->content;	
+		eval { $data = decode_json($data)->{video} };
+		$log->debug("step 1 ", Data::Dump::dump($data));
 
-sub getSampleRate {
-	use bytes;
+		if ( !$data || $data->{drm} ) {
+			$log->error("WE HAVE DRM OR AN ERROR $data->{drm}");
+			return $errorCb->();
+		}
 	
-	my ($url, $cb) = @_;
-		
-	Slim::Networking::SimpleAsyncHTTP->new ( 
-	sub {
-			my $data = shift->content;
-					
-			return $cb->( undef ) if !defined $data;
-			
-			my $adts;
-			my $v = { 'inBuf' => \$data,
-					  'pos'   => 0, 
-					  'state' => Plugins::FranceTV::MPEGTS::SYNCHRO } ;
-			my $len = Plugins::FranceTV::MPEGTS::processTS($v, \$adts, 256); # must be more than 188
-			
-			return $cb->( undef ) if !$len || (unpack('n', substr($adts, 0, 2)) & 0xFFF0 != 0xFFF0);
-						
-			my $sampleRate = (unpack('C', substr($adts, 2, 1)) & 0x3c) >> 2;
-			my @rates = ( 96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 
-						  12000, 11025, 8000, 7350, undef, undef, undef );
-						
-			$sampleRate = $rates[$sampleRate];			
-			$log->info("AAC samplerate: $sampleRate");
-			$cb->( $sampleRate );
-		},
-
-		sub {
-			$log->warn("HTTP error, cannot find sample rate");
-			$cb->( undef );
-		},
-		
-		Plugins::FranceTV::API::getSocks,
-
-	)->get( $url, 'Range' => 'bytes=0-16384' );
-
-}
-
-sub getFragments {
-	my ($cb, $id, $song) = @_;
-	my $url	= "http://webservices.francetelevisions.fr/tools/getInfosOeuvre/v2/?idDiffusion=$id";
-		
-	$log->info("getting master url for : $url, $id");
+		# get the token's url (the is will give the mpd's url)
+		my $http = Slim::Networking::SimpleAsyncHTTP->new ( $step2, $errorCb, { socks => Plugins::FranceTV::API::getSocks } );
+		$http->get( $data->{token} );  
+	};
 	
-	Slim::Networking::SimpleAsyncHTTP->new ( 
-		sub {
-			my $result = decode_json(shift->content);
-			my $master = first { $_->{format} eq 'm3u8-download' } @{$result->{videos}};
-			
-			$song->track->secs( $result->{real_duration} );
-			
-			$log->debug("master url: $master->{url}");
-			
-			getFragmentsUrl($cb, $master->{url});
-		},
+	
+	# intercept the MPD usable url
+	$step2 = sub {
+		my $data = shift->content;	
+		eval { $data = decode_json($data) };
+		$log->debug("step 2 ", Data::Dump::dump($data));
 
-		sub {
-			$cb->(undef);
-		},
+		$errorCb->() unless $data->{url};
+	
+		# need to intercept the redirected url
+		my $root;
+		my $http = Slim::Networking::Async::HTTP->new;
 		
-		Plugins::FranceTV::API::getSocks,
+		$http->send_request( {
+			request => HTTP::Request->new( GET => $data->{url} ),
+			onBody	=> $step3,
+			onRedirect => sub {	$root = shift->uri =~ s/[^\/]+$//r; },
+			passthrough => [ \$root ],
+		} );		
+	};
 
-	)->get($url);
-}
-
-sub getFragmentsUrl {
-	my ($cb, $url) = @_;
-					
-	Slim::Networking::SimpleAsyncHTTP->new ( 
-		sub {
-			my $result = shift->content;
-			my $bitrate;
-			my $fragmentUrl;
-				
-			for my $item ( split (/#EXT-X-STREAM-INF:/, $result) ) {
-				next if ($item !~ m/BANDWIDTH=(\d+),([\S\s]*)(http\S*)/s); 
-					
-				if (!defined $bitrate || $1 < $bitrate) {
-					$bitrate = $1;
-					$fragmentUrl = $3;
-				}
-			}
-			
-			$log->debug("fragment url: $fragmentUrl");
-			
-			getFragmentList($cb, $fragmentUrl, $bitrate);
-		},
-			
-		sub {
-			$cb->(undef);
-		},
+	# process the MPD
+	$step3 = sub {
+		my $mpd = shift->response->content;	
+		my ($root) = @_;
 		
-		Plugins::FranceTV::API::getSocks,
+		eval { $mpd = XMLin( $mpd, KeyAttr => [], ForceContent => 1, ForceArray => [ 'AdaptationSet', 'Representation', 'Period' ] ) };
+		return $errorCb->() if $@;
 		
-	)->get($url);
-}	
-
-
-sub getFragmentList {
-	my ($cb, $url, $bitrate) = @_;
-				
-	Slim::Networking::SimpleAsyncHTTP->new ( 
-		sub {
-			my $fragmentList = shift->content;
-			my @fragments;
-			my $position = 0;
-					
-			$log->debug("got fragment list: $fragmentList");
-			
-			for my $item ( split (/#EXTINF:/, $fragmentList) ) {
-				$item =~ m/([^,]+),([\S\s]*)(http\S*)/s;
-				$position += $1 if $3;
-				push @fragments, { position => $position, url => $3 } if $3;
+		my ($adaptation, $representation);
+		foreach my $item (@{$mpd->{Period}[0]->{AdaptationSet}}) { 
+			if ($item->{mimeType} eq 'audio/mp4' && grep { /$item->{Representation}->[0]->{bandwidth}/ } (22050, 24000, 44100, 48000, 88200, 96000)) {
+				$adaptation = $item;
+				$representation = $item->{Representation}->[0];			
+				last;
 			}	
-									
-			$cb->(\@fragments, $bitrate);
-		},	
-			
-		sub {
-			$cb->(undef);
-		},
+		}	
 		
-		Plugins::FranceTV::API::getSocks,
-					
-	)->get($url);
-}	
+		return $errorCb->() unless $representation;
+	
+		my $baseURL = getValue(['BaseURL', 'content'], [$mpd, $mpd->{Period}[0], $adaptation, $representation], '.');
+		$baseURL = $$root . $baseURL unless $baseURL =~ /^https?:/i;
+		
+		my $duration = getValue('duration', [$representation, $adaptation, $mpd->{Period}[0], $mpd]);
+		my ($misc, $hour, $min, $sec) = $duration =~ /P(?:([^T]*))T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/;
+		$duration = ($sec || 0) + (($min || 0) * 60) + (($hour || 0) * 3600);
 
+		# set of useful parameters for the $song object
+		my $segments = $adaptation->{SegmentList}->{SegmentURL} || $adaptation->{SegmentTemplate}->{SegmentTimeline}->{S};
+		my $params = {
+			samplingRate => getValue('audioSamplingRate', [$representation, $adaptation]),
+			channels => getValue('AudioChannelConfiguration', [$representation, $adaptation])->{value},
+			representation => $representation,
+			media => $adaptation->{SegmentTemplate}->{media},
+			timescale => getValue('timescale', [$adaptation->{SegmentList}, $adaptation->{SegmentTemplate}]),
+			baseURL => $baseURL,
+		};
+		
+		$log->info("MPD parameters ", Data::Dump::dump($params));
+				
+		$song->pluginData(segments => $segments);
+		$song->pluginData(params => $params);	
+		
+		$song->track->secs( $duration );
+		$song->track->samplerate( $params->{samplingRate} );
+		$song->track->channels( $params->{channels} ); 
+		#$song->track->bitrate(  );
+		
+		if ( my $meta = $cache->get("ft:meta-" . $id) ) {
+			$meta->{duration} = $duration;
+			$meta->{type} = "aac\@$params->{samplingRate}Hz";
+			$cache->set("ft:meta-" . $id, $meta);
+		}	
+		
+		$client->currentPlaylistUpdateTime( Time::HiRes::time() );
+		Slim::Control::Request::notifyFromArray( $client, [ 'newmetadata' ] );
+		
+		# ready to start
+		$successCb->();
+	};
+	
+	# start the sequence of requests and callbacks
+	my $http = Slim::Networking::SimpleAsyncHTTP->new ( $step1, $errorCb, { socks => Plugins::FranceTV::API::getSocks } );
+	$http->get( "https://player.webservices.francetelevisions.fr/v1/videos/$id?country_code=FR&device_type=desktop&browser=chrome" );  
+}
 
 sub getMetadataFor {
 	my ($class, $client, $url) = @_;
@@ -368,6 +362,30 @@ sub getMetadataFor {
 			 cover	=> $icon,
 			};
 }	
+
+sub getValue {
+	my ($keys, $where, $mode) = @_;
+	my $value;
+	
+	$keys = [$keys] unless ref $keys eq 'ARRAY';
+	
+	foreach my $hash (@$where) {
+		foreach my $k (@$keys) {
+			$hash = $hash->{$k};
+			last unless $hash;
+		}	
+		next unless $hash;
+		if ($mode eq '.') {
+			$value .= $hash;
+		} elsif ($mode eq 'f') {
+			return $hash if $hash;
+		} else {
+			$value ||= $hash;
+		}	
+	}
+
+	return $value;
+}
 
 sub getIcon {
 	my ( $class, $url ) = @_;

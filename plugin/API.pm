@@ -25,12 +25,10 @@ sub getSocks {
 	return undef unless $prefs->get('socks');
 	my ($server, $port) = split (/:/, $prefs->get('socksProxy'));
 	return {
-		socks => {
-			ProxyAddr => $server,
-			ProxyPort => $port,
-			Username => deobfuscate($prefs->get('socksUsername')),
-			Password => deobfuscate($prefs->get('socksPassword')),
-		}	
+		ProxyAddr => $server,
+		ProxyPort => $port,
+		Username => deobfuscate($prefs->get('socksUsername')),
+		Password => deobfuscate($prefs->get('socksPassword')),
 	};	
 }
 

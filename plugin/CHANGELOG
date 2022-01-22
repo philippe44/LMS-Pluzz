@@ -1,4 +1,19 @@
-﻿0.61.1
+﻿0.71.0
+ - improve favorite
+ 
+0.70.3
+ - use passthrough
+ 
+0.70.2
+ - capture redirect in one step
+ 
+0.70.1
+ - bring back getMetadataFor
+ 
+0.70.0
+ - HLS (mpeg-ts) disabled on FranceTV, move to new API and DASH (hate it)
+ 
+0.61.1
  - getIcon in API.pm was poiting nowhere
   
 0.61.0
