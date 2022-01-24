@@ -173,7 +173,6 @@ sub sysreadHLS_AAC {
 		$log->info("HLS-AAC: fetching index:$v->{'index'}/$total url:$url");		
 
 		$v->{'session'}->send_request( {
-				socks => Plugins::FranceTV::API::getSocks,
 				request => $request,
 				onRedirect => sub {
 					my $request = shift;
@@ -240,7 +239,6 @@ sub sysreadHLS_MPEG {
 		$log->info("HLS-MPEG: fetching index:$v->{'index'}/$total url:$url");
 		
 		$v->{'session'}->send_request( {
-				socks => Plugins::FranceTV::API::getSocks,			
 				request => $request,
 				onRedirect => sub {
 					# maybe we could mangle next URL, but for now just close session
@@ -313,7 +311,6 @@ sub sysreadMPD {
 		$log->info("fetching index:$v->{'index'}/$total url:$url");		
 
 		$v->{'session'}->send_request( {
-				socks => Plugins::FranceTV::API::getSocks,			
 				request => $request,
 				onRedirect => sub {
 					my $request = shift;
@@ -404,11 +401,10 @@ sub getNextTrack {
 	
 		# need to intercept the redirected url
 		$root = $data->{url};
-		my $http = Slim::Networking::Async::HTTP->new;
+		my $http = Slim::Networking::Async::HTTP->new ( { socks => Plugins::FranceTV::API::getSocks } );
 		my $next = $format eq 'hls' ? $step3HLS : $step3MPD;
 		
 		$http->send_request( {
-			socks => Plugins::FranceTV::API::getSocks,
 			request => HTTP::Request->new( GET => $root ),
 			onBody	=> $next,
 			# TODO: verify that $root is not captured (closure)

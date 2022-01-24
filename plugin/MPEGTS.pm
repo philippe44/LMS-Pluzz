@@ -2,8 +2,6 @@ package Plugins::FranceTV::MPEGTS;
 
 use strict;
 
-use Data::Dumper;
-
 use Slim::Utils::Log;
 
 # streaming states
@@ -101,7 +99,7 @@ sub processTS {
 				}	
 			}
 			
-			$log->debug ("Stream selected:", Dumper($v->{stream}));
+			$log->debug ("Stream selected:", Data::Dump::dump($v->{stream}));
 			$state = AUDIO unless !defined $v->{stream};
 		}	
 		
