@@ -14,6 +14,7 @@ use Slim::Utils::Errno;
 use Slim::Utils::Cache;
 
 use Plugins::FranceTV::m4a;
+use Plugins::FranceTV::MPEGTS;
 
 my $log   = logger('plugin.francetv');
 my $prefs = preferences('plugin.francetv');
@@ -33,7 +34,7 @@ so the server of course can decide to implement any of the gazillion of options 
 and the client, whose software is the most difficult to update, has to implement all the options 
 THIS IS RIDICULOUS.
 
-for HLS, see https://datatracker.ietf.org/doc/html/draft-pantos-http-live-streaming#section-5.2
+for HLS, see https://datatracker.ietf.org/doc/html/draft-pantos-http-live-streaming
 =cut
 
 sub new {
@@ -51,7 +52,7 @@ sub new {
 	
 	if ( my $newtime = ($seekdata->{'timeOffset'} || $song->pluginData('lastpos')) ) {
 
-		if ($params->{source} eq 'hls') {
+		if ($params->{source} =~ /hls/) {
 			$index = $params->{fragmentDuration} ? int($newtime / $params->{fragmentDuration}) : 0;		
 		} else {
 			TIME: foreach (@{$song->pluginData('segments')}) {
@@ -86,8 +87,10 @@ sub new {
 		${*$self}{'song'} = $args->{'song'};
 		${*$self}{'vars'} = $vars;
 		
-		if ($params->{source} eq 'hls') {
-			$vars->{sysread} = \&sysreadHLS;
+		if ($params->{source} eq 'hls-aac') {
+			$vars->{sysread} = \&sysreadHLS_AAC;
+		} elsif ($params->{source} eq 'hls-mpeg') {
+			$vars->{sysread} = \&sysreadHLS_MPEG;
 		} else {
 			$vars->{context} = { };		# context for mp4		
 			$vars->{repeat} = $repeat;	# might start in a middle of a repeat
@@ -147,18 +150,19 @@ sub sysread {
 	return $v->{'sysread'}($v, @_);
 }	
 
-sub sysreadHLS {
+sub sysreadHLS_AAC {
 	use bytes;
 	my $v = shift;
 	
 	my $song = ${*${$_[0]}}{song};
 	my $fragments = $song->pluginData('fragments');
 	my $total = scalar @$fragments;
-	
+
 	# here inBuf is not a reference but the bytes themselves
 	if ( $v->{index} < $total && $v->{retry} && length($v->{'inBuf'}) < $_[2] ) {
 		# this substitutes the xxxx.m3u8 in http://.../xxxx.m3u8?...
 		my $url = $v->{baseURL} =~ s/(?<=\/)[^\/]*(?=\?)/$fragments->[$v->{index}]/r;	
+
 		my $request = HTTP::Request->new( GET => $url );
 		my $params = $song->pluginData('params');
 
@@ -166,9 +170,10 @@ sub sysreadHLS {
 		$request->protocol( 'HTTP/1.1' );
 		$v->{fetching} = 1;
 		
-		$log->info("fetching index:$v->{'index'}/$total url:$url");		
+		$log->info("HLS-AAC: fetching index:$v->{'index'}/$total url:$url");		
 
 		$v->{'session'}->send_request( {
+				socks => Plugins::FranceTV::API::getSocks,
 				request => $request,
 				onRedirect => sub {
 					my $request = shift;
@@ -177,12 +182,12 @@ sub sysreadHLS {
 					$log->info("being redirected from $url to ", $request->uri, "using new base $v->{baseURL}");
 				},
 				onBody => sub {
-					$v->{fetching} = 0;
-					$v->{retry} = 5;
-					$v->{index}++;
-					my $iv = pack("v", $params->{index} + $v->{index}) . "\0" x 14;
-					$v->{inBuf} .= $params->{cipher}->decrypt(shift->response->content, $params->{key}, $iv);					
-					$log->debug("data length is now: ", length $v->{inBuf});
+					$v->{'fetching'} = 0;
+					$v->{'retry'} = 5;
+					$v->{'index'}++;
+					my $iv = pack("v", $params->{'index'} + $v->{'index'}) . "\0" x 14;
+					$v->{inBuf} .= $params->{'cipher'}->decrypt(shift->response->content, $params->{'key'}, $iv);					
+					$log->debug("data length is now: ", length $v->{'inBuf'});
 				},
 				onError => sub {
 					$v->{'session'}->disconnect;
@@ -191,18 +196,82 @@ sub sysreadHLS {
 					$v->{'baseURL'} = $params->{'baseURL'};
 					$log->error("cannot open session for $url ($_[1]) moving back to base URL");					
 				},
+				socks => Plugins::FranceTV::API::getSocks,
 		} );
 		
 		# we will get data on next call
-		if (length $v->{inBuf} == 0) {
+		if (length $v->{'inBuf'} == 0) {
 			$! = EINTR;
 			return undef;
 		}	
 	} 	
 	
 	# consume bytes and return them
-	$_[1] = substr($v->{inBuf}, 0, $_[2], '');
+	$_[1] = substr($v->{'inBuf'}, 0, $_[2], '');
 	return length $_[1];
+}
+
+sub sysreadHLS_MPEG {
+	use bytes;
+
+	my $v = shift;
+	my $song = ${*${$_[0]}}{song};
+	my $fragments = $song->pluginData('fragments');
+	my $total = scalar @$fragments;
+	
+	# end of current segment, get next one
+	if ( !defined $v->{'inBuf'} || length ${$v->{'inBuf'}} == 0 ) {
+	
+		# end of stream
+		return 0 if $v->{index} == $total;
+		
+		# get next fragment/chunk
+		my $url = $fragments->[$v->{index}];
+		$v->{'pos'} = 0;
+		$v->{'fetching'} = 1;
+		$v->{'disconnect'} = 0;
+						
+		my $request = HTTP::Request->new( GET => $url );
+		my $params = $song->pluginData('params');
+
+		$request->header( 'Connection', 'keep-alive' );
+		$request->protocol( 'HTTP/1.1' );
+		
+		$log->info("HLS-MPEG: fetching index:$v->{'index'}/$total url:$url");
+		
+		$v->{'session'}->send_request( {
+				socks => Plugins::FranceTV::API::getSocks,			
+				request => $request,
+				onRedirect => sub {
+					# maybe we could mangle next URL, but for now just close session
+					$v->{'disconnect'} = 1;
+					$log->info("being redirected from $url to ", $request->uri, "closing connection");
+				},
+				onBody => sub {
+					$v->{'fetching'} = 0;
+					$v->{'retry'} = 5;
+					$v->{'index'}++;
+					$v->{'inBuf'} = \shift->response->content;					
+					$v->{'session'}->disconnect if $v->{'disconnect'};					
+					$log->debug("received data length is: ", length ${$v->{'inBuf'}});
+				},
+				onError => sub {
+					$v->{'session'}->disconnect;
+					$v->{'fetching'} = 0;					
+					$v->{'retry'} = $v->{index} < $total - 1 ? $v->{'retry'} - 1 : 0;
+					$log->error("cannot open session for $url ($_[1])");					
+				},
+		} );
+			
+		$! = EINTR;
+		return undef;
+	}	
+				
+	my $len = Plugins::FranceTV::MPEGTS::processTS($v, $_[1], $_[2]);
+	return $len if $len;
+	
+	$! = EINTR;
+	return undef;
 }
 	
 sub sysreadMPD {
@@ -244,13 +313,14 @@ sub sysreadMPD {
 		$log->info("fetching index:$v->{'index'}/$total url:$url");		
 
 		$v->{'session'}->send_request( {
+				socks => Plugins::FranceTV::API::getSocks,			
 				request => $request,
 				onRedirect => sub {
 					my $request = shift;
 					my $redirect = $request->uri;
 					my $match = (reverse ($suffix) ^ reverse ($redirect)) =~ /^(\x00*)/;
 					$v->{'baseURL'} = substr $redirect, 0, -$+[1] if $match;
-					$log->info("being redirected from $url to ", $request->uri, "using new base $v->{baseURL}");
+					$log->info("being redirected from $url to ", $request->uri, "using new base $v->{'baseURL'}");
 				},
 				onBody => sub {
 					$v->{fetching} = 0;
@@ -264,7 +334,7 @@ sub sysreadMPD {
 					}
 					
 					$v->{inBuf} = \shift->response->content;
-					$log->debug("got chunk length: ", length ${$v->{inBuf}});
+					$log->debug("got chunk length: ", length ${$v->{'inBuf'}});
 				},
 				onError => sub {
 					$v->{'session'}->disconnect;
@@ -279,7 +349,7 @@ sub sysreadMPD {
 		return undef;
 	}	
 
-	my $len = Plugins::FranceTV::m4a::getAudio($v->{inBuf}, $v->{context}, $_[1], $_[2]);
+	my $len = Plugins::FranceTV::m4a::getAudio($v->{'inBuf'}, $v->{'context'}, $_[1], $_[2]);
 	return $len if $len;
 	
 	$! = EINTR;
@@ -288,11 +358,10 @@ sub sysreadMPD {
 
 sub getNextTrack {
 	my ($class, $song, $successCb, $errorCb) = @_;
-	my $url 	 = $song->track()->url;
-	my $client   = $song->master();
-	my ($step1, $step2, $step3HLS, $step3MPD, $step4, $step5);
-	my $duration;
-	my $format;
+	my $url = $song->track()->url;
+	my $client = $song->master();
+	my ($step1, $step2, $step3HLS, $step3MPD, $step4, $step5, $getAACParams, $extractADTS);
+	my ($duration, $format, $root);
 	
 	$song->pluginData(lastpos => ($url =~ /&lastpos=([\d]+)/)[0] || 0);
 	$url =~ s/&lastpos=[\d]*//;				
@@ -325,7 +394,6 @@ sub getNextTrack {
 		$http->get( $data->{token} );  
 	};
 	
-	
 	# intercept the MPD usable url
 	$step2 = sub {
 		my $data = shift->content;	
@@ -335,41 +403,53 @@ sub getNextTrack {
 		$errorCb->() unless $data->{url};
 	
 		# need to intercept the redirected url
-		my $root = $data->{url};
+		$root = $data->{url};
 		my $http = Slim::Networking::Async::HTTP->new;
 		my $next = $format eq 'hls' ? $step3HLS : $step3MPD;
 		
 		$http->send_request( {
+			socks => Plugins::FranceTV::API::getSocks,
 			request => HTTP::Request->new( GET => $root ),
 			onBody	=> $next,
+			# TODO: verify that $root is not captured (closure)
 			onRedirect => sub {	$root = shift->uri =~ s/[^\/]+$//r; },
-			passthrough => [ \$root ],
 		} );		
 	};
 	
 	# process HLS master file
 	$step3HLS = sub {
 		my $m3u8 = shift->response->content;	
-		my ($root) = @_;
+		my $url;
 		
 		$log->info("processing HLS format");
 		$log->debug($m3u8);
 		
 		$errorCb->() unless $m3u8;
 
-		$song->pluginData(params => { baseURL => $$root, source => 'hls' } );		
 		my ($audioUrl) = $m3u8 =~ /^#EXT-X-MEDIA:TYPE=AUDIO.*URI="([^"]+)"/m;
-		$log->info("HLS audio suffix $audioUrl");
-	
-		# this is equivalent of
-		# my ($target) = $url =~ /\S+\/([^\?]+)\?\S+/;
-		# $url =~ s/$target/$audioUrl/;	
-		$$root =~ s/(?<=\/)[^\/]*(?=\?)/$audioUrl/;	
-		$log->info("HLS root url $$root");
 		
-		# get the token's url (the is will give the mpd's url)
+		if ($audioUrl) {
+			# this is equivalent of
+			# my ($target) = $url =~ /\S+\/([^\?]+)\?\S+/;
+			# $url =~ s/$target/$audioUrl/;	
+			$url = $root =~ s/(?<=\/)[^\/]*(?=\?)/$audioUrl/r;	
+			$song->pluginData(params => { baseURL => $root, source => 'hls-aac' } );					
+			$log->info("HLS audio-aac $audioUrl with root url $root");
+		} else {
+			my $bandwidth;
+			for my $item ( split (/#EXT-X-STREAM-INF/, $m3u8) ) {
+				next unless $item =~ /\S+BANDWIDTH=(\d+).*\n(^http\S+)/m;
+				next if $bandwidth && $1 > $bandwidth;
+				$bandwidth = $1;
+				$url = $2;
+			}
+			$song->pluginData(params => { baseURL => $root, source => 'hls-mpeg' } );					
+			$log->info("HLS mpeg-ts bandwidth $bandwidth using $audioUrl with root url $root");
+		}	
+		
+		# get the token's url (the is will give the HLS's url)
 		my $http = Slim::Networking::SimpleAsyncHTTP->new ( $step4, $errorCb, { socks => Plugins::FranceTV::API::getSocks } );
-		$http->get( $$root );  
+		$http->get( $url );  
 	};
 	
 	# process HLS slave file
@@ -380,11 +460,12 @@ sub getNextTrack {
 		
 		my @fragments;
 		for my $item ( split (/#EXTINF/, $m3u8) ) {
-			next unless $item =~ /(\S+\.aac)/s;
+			# this is not a great regex...
+			next unless $item =~ /\S+\n(\S+\.aac|^http\S+)/m;
 			push @fragments, $1;
 		}
 		$song->pluginData(fragments => \@fragments);
-		
+
 		$m3u8 =~ /^#EXT-X-TARGETDURATION:(\d+)/m;
 		$song->pluginData('params')->{'fragmentDuration'} = $1 || 0;
 		
@@ -393,7 +474,7 @@ sub getNextTrack {
 		
 		# are the files encrypted (really...)
 		my ($keyUrl) = $m3u8 =~ /^#EXT-X-KEY:METHOD=AES-128.*URI="([^"]+)"/m;
-		return $successCb->() unless $keyUrl;
+		return $getAACParams->() unless $keyUrl;
 		
 		$log->info("This file is encrypted with $keyUrl");
 		my $http = Slim::Networking::SimpleAsyncHTTP->new ( $step5, $errorCb, { socks => Plugins::FranceTV::API::getSocks } );
@@ -409,51 +490,83 @@ sub getNextTrack {
 
 		$song->pluginData('params')->{'key'} = $key;
 		$song->pluginData('params')->{'cipher'} = Crypt::Mode::CBC->new('AES');
-
-		# get a bit of 1st segment to have sample rate and channels		
+		
+		$getAACParams->();
+	};
+	
+	$extractADTS = sub {
+		my $data = shift;
+		my @rates = (96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350);
+		my $params = $song->pluginData('params');
+		
+		# decrypt if needed
+		if ($params->{cipher}) {
+			my $iv = pack("v", $params->{index}) . "\0" x 14;
+			$data = $params->{cipher}->decrypt($data, $params->{key}, $iv);					
+		}	
+				
+		# search pattern
+		$data =~ /\xff(?:\xf1|\xf0)(.{2})/;
+				
+		my $adts = unpack("n", $1);
+		$params->{samplingRate} = $rates[($adts >> 10) & 0x0f];
+		$params->{channels} = ($adts >> 6) & 0x3;
+				
+		$song->track->secs( $duration );
+		$song->track->samplerate( $params->{samplingRate} );
+		$song->track->channels( $params->{channels} ); 
+		
+		if ( my $meta = $cache->get("ft:meta-" . $id) ) {
+			$meta->{duration} = $duration;
+			$meta->{type} = "aac\@$params->{samplingRate}Hz";
+			$cache->set("ft:meta-" . $id, $meta);
+		}	
+		
+		$client->currentPlaylistUpdateTime( Time::HiRes::time() );
+		Slim::Control::Request::notifyFromArray( $client, [ 'newmetadata' ] );	
+	};
+	
+	$getAACParams = sub {
+		# can continue now...		
+		$successCb->();
+		
+		# get a bit of first ADTS segment to have sample rate and channels		
 		my $params = $song->pluginData('params');
 		my $fragments = $song->pluginData('fragments');
-		my $url = $params->{baseURL} =~ s/(?<=\/)[^\/]*(?=\?)/$fragments->[0]/r;	
 		
-		Slim::Networking::SimpleAsyncHTTP->new ( sub {
-				my $data = shift->content;
-				my @rates = (96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350);
-				
-				my $iv = pack("v", $params->{index}) . "\0" x 14;
-				$data = $params->{cipher}->decrypt($data, $params->{key}, $iv);					
-				
-				# search pattern
-				$data =~ /\xff(?:\xf1|\xf0)(.{2})/;
-				
-				my $adts = unpack("n", $1);
-				$params->{samplingRate} = $rates[($adts >> 10) & 0x0f];
-				$params->{channels} = ($adts >> 6) & 0x3;
-				
-				$song->track->secs( $duration );
-				$song->track->samplerate( $params->{samplingRate} );
-				$song->track->channels( $params->{channels} ); 
-		
-				if ( my $meta = $cache->get("ft:meta-" . $id) ) {
-					$meta->{duration} = $duration;
-					$meta->{type} = "aac\@$params->{samplingRate}Hz";
-					$cache->set("ft:meta-" . $id, $meta);
-				}	
-		
-				$client->currentPlaylistUpdateTime( Time::HiRes::time() );
-				Slim::Control::Request::notifyFromArray( $client, [ 'newmetadata' ] );	
-			}, sub {
-				$log->warn("cannot get rate/channel");
-			}, 
-			{ socks => Plugins::FranceTV::API::getSocks },
-		)->get( $url, Range => 'bytes=0-255' );  
-				
-		$successCb->();
+		if ($params->{source} eq 'hls-mpeg') {
+			Slim::Networking::SimpleAsyncHTTP->new ( 
+				sub {
+					my $v = { inBuf => shift->contentRef };
+					Plugins::FranceTV::MPEGTS::processTS($v, my $data, 256);
+					open my $fh, ">", 'd:/toto.aac';
+					binmode $fh;
+					print $fh $data;
+					close $fh;
+					$extractADTS->($data);
+				}, 
+				sub {
+					$log->warn("cannot get hls-mpeg trackinfo");
+				},
+				{ socks => Plugins::FranceTV::API::getSocks } 
+			)->get( $fragments->[0], Range => 'bytes=0-128000' );
+		} else {
+			my $url = $params->{baseURL} =~ s/(?<=\/)[^\/]*(?=\?)/$fragments->[0]/r;	
+			Slim::Networking::SimpleAsyncHTTP->new ( 
+				sub {
+					$extractADTS->(shift->content);
+				}, 
+				sub {
+					$log->warn("cannot get hls-aac trackinfo");
+				},
+				{ socks => Plugins::FranceTV::API::getSocks } 
+			)->get( $url, Range => 'bytes=0-255' );  
+		}	
 	};
 
 	# process the MPD
 	$step3MPD = sub {
 		my $mpd = shift->response->content;	
-		my ($root) = @_;
 		$log->info("processing mpd format");
 		$log->debug($mpd);
 		
@@ -472,7 +585,7 @@ sub getNextTrack {
 		return $errorCb->() unless $representation;
 	
 		my $baseURL = getValue(['BaseURL', 'content'], [$mpd, $mpd->{Period}[0], $adaptation, $representation], '.');
-		$baseURL = $$root . $baseURL unless $baseURL =~ /^https?:/i;
+		$baseURL = $root . $baseURL unless $baseURL =~ /^https?:/i;
 		
 		my $duration = getValue('duration', [$representation, $adaptation, $mpd->{Period}[0], $mpd]);
 		my ($misc, $hour, $min, $sec) = $duration =~ /P(?:([^T]*))T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/;
