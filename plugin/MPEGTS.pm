@@ -38,7 +38,6 @@ sub processTS {
 		if ($state == SYNCHRO)	{
 			if ( ${$v->{inBuf}} =~ m/(G.{187}G)/s ) {
 				$log->debug ("Synchro found at $-[1]");
-				$log->error ("Synchro found at $-[1]");
 				substr(${$v->{inBuf}}, 0, $-[1]) = '';
 				$state = PIDPAT;
 			} else { 

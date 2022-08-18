@@ -1,4 +1,10 @@
-﻿0.81.1
+﻿0.81.4
+ - some smart asshole in FranceTV backend added user-agent check
+ 
+0.81.2
+ - fix logs
+ 
+0.81.1
  - fix socks usage
  
 0.81.0
