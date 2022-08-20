@@ -54,8 +54,8 @@ sub new {
 
 		if ($params->{source} =~ /hls/) {
 			$index = $params->{fragmentDuration} ? int($newtime / $params->{fragmentDuration}) : 0;		
-		} else {
-			TIME: foreach (@{$song->pluginData('segments')}) {
+		} elsif (my $segments = $song->pluginData('segments')) {
+			TIME: foreach (@{$segments}) {
 				$offset = $_->{t} if $_->{t};
 				for my $c (0..$_->{r} || 0) {
 					$repeat = $c;
@@ -63,9 +63,11 @@ sub new {
 					$offset += $_->{d};				
 				}	
 				$index++;			
-			}	
+			}
+		} else {
+			$index = int($newtime / ($params->{d} / $params->{timescale}));
 		}	
-				
+			
 		$song->can('startOffset') ? $song->startOffset($newtime) : ($song->{startOffset} = $newtime);
 		$args->{'client'}->master->remoteStreamStartTime(Time::HiRes::time() - $newtime);
 	}
@@ -282,7 +284,7 @@ sub sysreadMPD {
 		my $song = ${*${$_[0]}}{song};
 		my $segments = $song->pluginData('segments');
 		my $params = $song->pluginData('params');
-		my $total = $segments ? scalar @{$segments} : ($params->{duration} / ($params->{d} / $params->{timescale})); 
+		my $total = $segments ? scalar @{$segments} : int($params->{duration} / ($params->{d} / $params->{timescale})); 
 		
 		# end of stream
 		return 0 if $v->{index} >= $total || !$v->{retry};
@@ -300,7 +302,8 @@ sub sysreadMPD {
 		$suffix =~ s/\$RepresentationID\$/$params->{representation}->{id}/;
 		$suffix =~ s/\$Bandwidth\$/$params->{representation}->{bandwidth}/;
 		$suffix =~ s/\$Time\$/$v->{offset}/;
-		$suffix =~ s/\$Number\$/$v->{index}/;
+		my $number = $v->{index} + 1;
+		$suffix =~ s/\$Number\$/$number/;
 
 		my $url = $v->{'baseURL'} . "/$suffix";
 		
