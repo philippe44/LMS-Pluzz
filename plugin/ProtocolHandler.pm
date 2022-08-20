@@ -535,10 +535,6 @@ sub getNextTrack {
 				sub {
 					my $v = { inBuf => shift->contentRef };
 					Plugins::FranceTV::MPEGTS::processTS($v, my $data, 256);
-					open my $fh, ">", 'd:/toto.aac';
-					binmode $fh;
-					print $fh $data;
-					close $fh;
 					$extractADTS->($data);
 				}, 
 				sub {
@@ -571,7 +567,7 @@ sub getNextTrack {
 		
 		my ($adaptation, $representation);
 		foreach my $item (@{$mpd->{Period}[0]->{AdaptationSet}}) { 
-			if ($item->{mimeType} eq 'audio/mp4' && grep { /$item->{Representation}->[0]->{bandwidth}/ } (22050, 24000, 44100, 48000, 88200, 96000)) {
+			if ($item->{mimeType} eq 'audio/mp4' && grep { /$item->{Representation}->[0]->{bandwidth}/ } (64000, 96000, 128000)) {
 				$adaptation = $item;
 				$representation = $item->{Representation}->[0];			
 				last;

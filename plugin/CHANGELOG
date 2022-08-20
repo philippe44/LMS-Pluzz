@@ -1,4 +1,8 @@
-﻿0.81.4
+﻿0.81.5
+ - remove nasty debug log
+ - bandwidth in MPD is not sample rate 
+ 
+0.81.4
  - some smart asshole in FranceTV backend added user-agent check
  
 0.81.2
