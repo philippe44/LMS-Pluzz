@@ -282,15 +282,15 @@ sub sysreadMPD {
 		my $song = ${*${$_[0]}}{song};
 		my $segments = $song->pluginData('segments');
 		my $params = $song->pluginData('params');
-		my $total = scalar @{$segments}; 
+		my $total = $segments ? scalar @{$segments} : ($params->{duration} / ($params->{d} / $params->{timescale})); 
 		
 		# end of stream
-		return 0 if $v->{index} == $total || !$v->{retry};
+		return 0 if $v->{index} >= $total || !$v->{retry};
 		
-		$v->{fetching} = 1;
-	
+		$v->{fetching} = 1;	
+		
 		# get next fragment/chunk
-		my $item = @{$segments}[$v->{index}];
+		my $item = $segments ? @{$segments}[$v->{index}] : { d => $params->{duration} };
 		my $suffix = $item->{media} || $params->{media};
 		
 		# don't think that 't' can be set at anytime, but just in case...
@@ -408,7 +408,10 @@ sub getNextTrack {
 			request => HTTP::Request->new( GET => $root ),
 			onBody	=> $next,
 			# TODO: verify that $root is not captured (closure)
-			onRedirect => sub {	$root = shift->uri =~ s/[^\/]+$//r; },
+			onRedirect => sub {	
+				$root = shift->uri =~ s/[^\/]+$//r;
+				$root =~ s/\/$//;
+			},
 		} );		
 	};
 	
@@ -567,17 +570,19 @@ sub getNextTrack {
 		
 		my ($adaptation, $representation);
 		foreach my $item (@{$mpd->{Period}[0]->{AdaptationSet}}) { 
-			if ($item->{mimeType} eq 'audio/mp4' && grep { /$item->{Representation}->[0]->{bandwidth}/ } (64000, 96000, 128000)) {
+			if ($item->{mimeType} eq 'audio/mp4') {
 				$adaptation = $item;
-				$representation = $item->{Representation}->[0];			
+				my @bandwidth = sort { $a->{bandwidth} < $b->{bandwidth} } @{$item->{Representation}};
+				$representation = $bandwidth[0];
 				last;
 			}	
-		}	
-		
+		}			
+				
 		return $errorCb->() unless $representation;
 	
 		my $baseURL = getValue(['BaseURL', 'content'], [$mpd, $mpd->{Period}[0], $adaptation, $representation], '.');
-		$baseURL = $root . $baseURL unless $baseURL =~ /^https?:/i;
+		$baseURL = "$root/$baseURL" unless $baseURL =~ /^https?:/i;
+		$baseURL =~ s/\/$//;
 		
 		my $duration = getValue('duration', [$representation, $adaptation, $mpd->{Period}[0], $mpd]);
 		my ($misc, $hour, $min, $sec) = $duration =~ /P(?:([^T]*))T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/;
@@ -588,8 +593,10 @@ sub getNextTrack {
 		my $params = {
 			samplingRate => getValue('audioSamplingRate', [$representation, $adaptation]),
 			channels => getValue('AudioChannelConfiguration', [$representation, $adaptation])->{value},
+			duration => $duration,			
 			representation => $representation,
 			media => $adaptation->{SegmentTemplate}->{media},
+			d => $adaptation->{SegmentTemplate}->{duration},
 			timescale => getValue('timescale', [$adaptation->{SegmentList}, $adaptation->{SegmentTemplate}]),
 			baseURL => $baseURL,
 			source => 'mpd',

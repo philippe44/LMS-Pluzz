@@ -1,4 +1,7 @@
-﻿0.81.5
+﻿0.81.6
+ - fix some mpg issues about baseURL and template
+
+0.81.5
  - remove nasty debug log
  - bandwidth in MPD is not sample rate 
  
