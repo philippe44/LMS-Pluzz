@@ -1,6 +1,8 @@
-﻿0.81.7
- - fix some mpg issues about baseURL 
- - better handling of SegmentTemplate
+﻿0.82.0
+ -add Perl 5.34 support 
+ 
+0.81.6
+ - fix some mpg issues about baseURL and template
 
 0.81.5
  - remove nasty debug log
