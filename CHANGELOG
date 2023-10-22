@@ -1,4 +1,7 @@
-﻿0.82.2
+﻿0.82.3
+ - substr optimization in m4a.pm
+ 
+0.82.2
  - fix baseURL for MPD
  
 0.82.1

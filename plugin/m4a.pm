@@ -172,7 +172,7 @@ sub process_container {
 		my ($sub_type, $sub_size) = get_next_atom($data);
 		   
 		$result{$sub_type} = process_atom($sub_type, $sub_size - 8, substr($data, 8, $sub_size - 8));
-		$data = substr($data, $sub_size);
+		substr($data, 0, $sub_size, '');
 		$size -= $sub_size;
 	}
 	 
