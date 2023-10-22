@@ -1,4 +1,7 @@
-﻿0.82.1
+﻿0.82.2
+ - fix baseURL for MPD
+ 
+0.82.1
  - works better with the right library...
  
 0.82.0

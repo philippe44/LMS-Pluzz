@@ -1,14 +1,14 @@
 <?xml version='1.0' standalone='yes'?>
 <extensions>
   <icon>plugins/FranceTV/html/images/francetv.jpg</icon>
+  <optionsURL>plugins/FranceTV/settings/basic.html</optionsURL>
   <targetApplication>
     <maxVersion>*</maxVersion>
     <id>SlimServer</id>
     <minVersion>7.7</minVersion>
   </targetApplication>
-  <optionsURL>plugins/FranceTV/settings/basic.html</optionsURL>
   <creator>Philippe</creator>
-  <version>0.82.1</version>
+  <version>0.82.2</version>
   <name>PLUGIN_FRANCETV</name>
   <description>PLUGIN_FRANCETV_DESC</description>
   <email>philippe_44@outlook.com</email>

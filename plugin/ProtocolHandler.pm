@@ -83,6 +83,7 @@ sub new {
 			'retry'		  => 5,
 			'session' 	  => Slim::Networking::Async::HTTP->new( { socks => Plugins::FranceTV::API::getSocks } ),
 			'baseURL'     => $params->{baseURL}, 
+			'query'       => $params->{query}, 
 	};		
 	
 	if (defined($self)) {
@@ -305,7 +306,7 @@ sub sysreadMPD {
 		my $number = $v->{index} + 1;
 		$suffix =~ s/\$Number\$/$number/;
 
-		my $url = $v->{'baseURL'} . "/$suffix";
+		my $url = $v->{'baseURL'} . "/$suffix" . $v->{'query'};
 		
 		my $request = HTTP::Request->new( GET => $url );
 		$request->header( 'Connection', 'keep-alive' );
@@ -583,9 +584,10 @@ sub getNextTrack {
 				
 		return $errorCb->() unless $representation;
 	
+		($root, my $query) = $root =~ /(.*)\/(?:[^\?]*)(.*)$/;
 		my $baseURL = getValue(['BaseURL', 'content'], [$mpd, $mpd->{Period}[0], $adaptation, $representation], '.');
 		$baseURL = "$root/$baseURL" unless $baseURL =~ /^https?:/i;
-		$baseURL =~ s/\/$//;
+		$baseURL =~ s/\/$//;		
 		
 		my $duration = getValue('duration', [$representation, $adaptation, $mpd->{Period}[0], $mpd]);
 		my ($misc, $hour, $min, $sec) = $duration =~ /P(?:([^T]*))T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/;
@@ -602,6 +604,7 @@ sub getNextTrack {
 			d => $adaptation->{SegmentTemplate}->{duration},
 			timescale => getValue('timescale', [$adaptation->{SegmentList}, $adaptation->{SegmentTemplate}]),
 			baseURL => $baseURL,
+			query => $query,
 			source => 'mpd',
 		};
 		
